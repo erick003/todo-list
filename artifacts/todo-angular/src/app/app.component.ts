@@ -1,12 +1,26 @@
-import { Component, signal, computed } from '@angular/core';
-import { CommonModule } from '@angular/common';
+import { Component, signal, computed, inject } from '@angular/core';
+import { CommonModule, DatePipe } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { trigger, transition, style, animate, query, stagger } from '@angular/animations';
+import { ButtonModule } from 'primeng/button';
+import { InputTextModule } from 'primeng/inputtext';
+import { InputTextareaModule } from 'primeng/inputtextarea';
+import { DialogModule } from 'primeng/dialog';
+import { DropdownModule } from 'primeng/dropdown';
+import { CheckboxModule } from 'primeng/checkbox';
+import { TagModule } from 'primeng/tag';
+import { ToastModule } from 'primeng/toast';
+import { ConfirmDialogModule } from 'primeng/confirmdialog';
+import { TooltipModule } from 'primeng/tooltip';
+import { DividerModule } from 'primeng/divider';
+import { ConfirmationService, MessageService } from 'primeng/api';
 
 export interface Todo {
   id: number;
   text: string;
+  description: string;
+  priority: number;
   completed: boolean;
+  createdAt: Date;
 }
 
 export type FilterType = 'all' | 'active' | 'completed';
@@ -14,221 +28,361 @@ export type FilterType = 'all' | 'active' | 'completed';
 @Component({
   selector: 'app-root',
   standalone: true,
-  imports: [CommonModule, FormsModule],
-  animations: [
-    trigger('listAnimation', [
-      transition('* <=> *', [
-        query(':enter', [
-          style({ opacity: 0, transform: 'translateY(-10px)' }),
-          stagger('40ms', [
-            animate('180ms ease-out', style({ opacity: 1, transform: 'translateY(0)' }))
-          ])
-        ], { optional: true }),
-        query(':leave', [
-          animate('150ms ease-in', style({ opacity: 0, transform: 'translateX(24px)' }))
-        ], { optional: true })
-      ])
-    ]),
-    trigger('fadeSlide', [
-      transition(':enter', [
-        style({ opacity: 0, transform: 'translateY(-6px)' }),
-        animate('200ms ease-out', style({ opacity: 1, transform: 'translateY(0)' }))
-      ])
-    ])
+  imports: [
+    CommonModule,
+    DatePipe,
+    FormsModule,
+    ButtonModule,
+    InputTextModule,
+    InputTextareaModule,
+    DialogModule,
+    DropdownModule,
+    CheckboxModule,
+    TagModule,
+    ToastModule,
+    ConfirmDialogModule,
+    TooltipModule,
+    DividerModule,
   ],
+  providers: [ConfirmationService, MessageService],
   template: `
-    <div class="min-h-screen flex flex-col items-center py-16 px-4">
+    <p-toast position="top-right"></p-toast>
+    <p-confirmDialog></p-confirmDialog>
 
-      <!-- Header -->
-      <div class="w-full max-w-lg mb-8 text-center" @fadeSlide>
-        <h1 class="text-4xl font-bold text-gray-800 tracking-tight mb-1">
-          To Do List
-        </h1>
-        <p class="text-gray-400 text-sm">Organize suas tarefas com simplicidade</p>
-      </div>
+    <div class="min-h-screen bg-gradient-to-br from-slate-100 to-blue-50 p-6">
+      <div class="max-w-4xl mx-auto">
 
-      <!-- Card principal -->
-      <div class="w-full max-w-lg bg-white rounded-2xl shadow-xl shadow-violet-100/50 border border-violet-100/60 overflow-hidden" @fadeSlide>
+        <!-- Header -->
+        <header class="flex items-center justify-between mb-8">
+          <div>
+            <h1 class="text-3xl font-bold text-gray-900 tracking-tight">To Do List</h1>
+            <p class="text-gray-500 text-sm mt-1">Gerencie suas tarefas com eficiência</p>
+          </div>
+          <p-button
+            label="Nova Tarefa"
+            icon="pi pi-plus"
+            (onClick)="openAddDialog()">
+          </p-button>
+        </header>
 
-        <!-- Input de nova tarefa -->
-        <div class="p-5 border-b border-gray-100">
-          <div class="flex gap-3">
-            <input
-              type="text"
-              [(ngModel)]="newTodoText"
-              (keyup.enter)="addTodo()"
-              placeholder="Adicionar nova tarefa..."
-              maxlength="200"
-              class="flex-1 px-4 py-3 rounded-xl border border-gray-200 bg-gray-50 text-gray-700 text-sm placeholder-gray-400
-                     focus:outline-none focus:ring-2 focus:ring-violet-400 focus:border-transparent focus:bg-white
-                     transition-all duration-150"
-            />
-            <button
-              (click)="addTodo()"
-              [disabled]="!newTodoText.trim()"
-              class="px-5 py-3 bg-violet-600 text-white text-sm font-semibold rounded-xl
-                     hover:bg-violet-700 active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed
-                     transition-all duration-150 shadow-md shadow-violet-200 whitespace-nowrap"
-            >
-              + Adicionar
-            </button>
+        <!-- Stats -->
+        <div class="grid grid-cols-3 gap-4 mb-6">
+          <div class="bg-white rounded-2xl p-5 shadow-sm border border-gray-100 text-center">
+            <p class="text-3xl font-bold text-blue-600">{{ todos().length }}</p>
+            <p class="text-xs text-gray-400 mt-1 uppercase tracking-widest font-medium">Total</p>
+          </div>
+          <div class="bg-white rounded-2xl p-5 shadow-sm border border-gray-100 text-center">
+            <p class="text-3xl font-bold text-orange-500">{{ activeTodosCount() }}</p>
+            <p class="text-xs text-gray-400 mt-1 uppercase tracking-widest font-medium">Pendentes</p>
+          </div>
+          <div class="bg-white rounded-2xl p-5 shadow-sm border border-gray-100 text-center">
+            <p class="text-3xl font-bold text-emerald-600">{{ completedTodosCount() }}</p>
+            <p class="text-xs text-gray-400 mt-1 uppercase tracking-widest font-medium">Concluídas</p>
           </div>
         </div>
 
-        <!-- Filtros -->
-        <div class="flex items-center gap-1.5 px-5 py-3 border-b border-gray-100 bg-gray-50/50">
-          <button class="filter-btn" [class.active]="currentFilter() === 'all'" (click)="setFilter('all')">
-            Todas <span class="ml-1 text-xs opacity-70">({{ todos().length }})</span>
-          </button>
-          <button class="filter-btn" [class.active]="currentFilter() === 'active'" (click)="setFilter('active')">
-            Pendentes <span class="ml-1 text-xs opacity-70">({{ activeTodosCount() }})</span>
-          </button>
-          <button class="filter-btn" [class.active]="currentFilter() === 'completed'" (click)="setFilter('completed')">
-            Concluídas <span class="ml-1 text-xs opacity-70">({{ completedTodosCount() }})</span>
-          </button>
-          @if (completedTodosCount() > 0) {
-            <button
-              (click)="clearCompleted()"
-              class="ml-auto text-xs text-red-400 hover:text-red-600 transition-colors duration-150 font-medium whitespace-nowrap"
-            >
-              Limpar concluídas
-            </button>
-          }
+        <!-- Filters -->
+        <div class="flex items-center gap-2 mb-5">
+          <p-button
+            label="Todas"
+            size="small"
+            [outlined]="currentFilter() !== 'all'"
+            (onClick)="setFilter('all')">
+          </p-button>
+          <p-button
+            label="Pendentes"
+            size="small"
+            [outlined]="currentFilter() !== 'active'"
+            (onClick)="setFilter('active')">
+          </p-button>
+          <p-button
+            label="Concluídas"
+            size="small"
+            [outlined]="currentFilter() !== 'completed'"
+            (onClick)="setFilter('completed')">
+          </p-button>
         </div>
 
-        <!-- Lista de tarefas -->
-        <div class="divide-y divide-gray-100 min-h-20">
-          @if (filteredTodos().length === 0) {
-            <div class="flex flex-col items-center justify-center py-14 text-center" @fadeSlide>
-              @if (todos().length === 0) {
-                <div class="text-4xl mb-3">📝</div>
-                <p class="text-gray-400 text-sm font-medium">Nenhuma tarefa ainda</p>
-                <p class="text-gray-300 text-xs mt-1">Adicione sua primeira tarefa acima</p>
-              } @else {
-                <div class="text-4xl mb-3">🎉</div>
-                <p class="text-gray-400 text-sm font-medium">Nenhuma tarefa aqui</p>
-                <p class="text-gray-300 text-xs mt-1">Troque o filtro para ver outras tarefas</p>
-              }
-            </div>
-          } @else {
-            <ul [@listAnimation]="filteredTodos().length">
-              @for (todo of filteredTodos(); track todo.id) {
-                <li class="flex items-center gap-3 px-5 py-4 hover:bg-gray-50/70 group transition-colors duration-100">
-                  <!-- Checkbox circular -->
-                  <button
-                    (click)="toggleTodo(todo.id)"
-                    class="flex-shrink-0 w-5 h-5 rounded-full border-2 transition-all duration-150 flex items-center justify-center"
-                    [class.border-violet-500]="todo.completed"
-                    [class.bg-violet-500]="todo.completed"
-                    [class.border-gray-300]="!todo.completed"
-                    [attr.aria-label]="todo.completed ? 'Desmarcar' : 'Marcar como concluída'"
-                  >
-                    @if (todo.completed) {
-                      <svg class="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"/>
-                      </svg>
-                    }
-                  </button>
-
-                  <!-- Texto -->
-                  @if (editingId() === todo.id) {
-                    <input
-                      type="text"
-                      [(ngModel)]="editingText"
-                      (keyup.enter)="saveEdit(todo.id)"
-                      (keyup.escape)="cancelEdit()"
-                      (blur)="saveEdit(todo.id)"
-                      class="flex-1 px-2 py-0.5 text-sm text-gray-700 border border-violet-400 rounded-lg
-                             focus:outline-none focus:ring-2 focus:ring-violet-300 bg-white"
-                      [id]="'edit-' + todo.id"
-                    />
-                  } @else {
-                    <span
-                      class="flex-1 text-sm cursor-pointer select-none transition-colors duration-150"
-                      [class.text-gray-700]="!todo.completed"
-                      [class.text-gray-400]="todo.completed"
-                      [class.line-through]="todo.completed"
-                      (dblclick)="startEdit(todo)"
-                      title="Clique duplo para editar"
-                    >
-                      {{ todo.text }}
-                    </span>
-                  }
-
-                  <!-- Ações -->
-                  <div class="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity duration-150 flex-shrink-0">
-                    @if (editingId() !== todo.id) {
-                      <button
-                        (click)="startEdit(todo)"
-                        class="p-1.5 text-gray-400 hover:text-violet-500 rounded-lg hover:bg-violet-50 transition-all duration-150"
-                        title="Editar"
-                      >
-                        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                            d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/>
-                        </svg>
-                      </button>
-                    }
-                    <button
-                      (click)="deleteTodo(todo.id)"
-                      class="p-1.5 text-gray-400 hover:text-red-500 rounded-lg hover:bg-red-50 transition-all duration-150"
-                      title="Excluir"
-                    >
-                      <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                          d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
-                      </svg>
-                    </button>
-                  </div>
-                </li>
-              }
-            </ul>
-          }
-        </div>
-
-        <!-- Footer -->
-        @if (todos().length > 0) {
-          <div class="px-5 py-3 bg-gray-50/60 border-t border-gray-100 flex items-center justify-between" @fadeSlide>
-            <span class="text-xs text-gray-400">
-              @if (activeTodosCount() === 0) {
-                Todas as tarefas concluídas! 🎉
-              } @else {
-                {{ activeTodosCount() }} {{ activeTodosCount() === 1 ? 'tarefa pendente' : 'tarefas pendentes' }}
-              }
-            </span>
-            @if (todos().length > 1) {
-              <button
-                (click)="toggleAll()"
-                class="text-xs text-violet-500 hover:text-violet-700 font-medium transition-colors duration-150"
-              >
-                {{ activeTodosCount() > 0 ? 'Marcar todas' : 'Desmarcar todas' }}
-              </button>
-            }
+        <!-- Empty state -->
+        @if (filteredTodos().length === 0) {
+          <div class="bg-white rounded-2xl p-16 shadow-sm border border-gray-100 text-center">
+            <i class="pi pi-inbox text-6xl text-gray-200 mb-4 block"></i>
+            <p class="text-gray-400 font-medium">Nenhuma tarefa encontrada</p>
+            <p class="text-gray-300 text-sm mt-1">Clique em "Nova Tarefa" para começar</p>
           </div>
         }
+
+        <!-- Todo cards -->
+        <div class="flex flex-col gap-3">
+          @for (todo of filteredTodos(); track todo.id) {
+            <div
+              class="bg-white rounded-2xl p-5 shadow-sm border transition-all duration-200 hover:shadow-md"
+              [class.border-emerald-200]="todo.completed"
+              [class.border-gray-100]="!todo.completed">
+
+              <div class="flex items-start gap-4">
+
+                <!-- Toggle button -->
+                <div class="pt-0.5 flex-shrink-0">
+                  <p-button
+                    [icon]="todo.completed ? 'pi pi-check-circle' : 'pi pi-circle'"
+                    [text]="true"
+                    [rounded]="true"
+                    [severity]="todo.completed ? 'success' : 'secondary'"
+                    pTooltip="Marcar / desmarcar"
+                    tooltipPosition="top"
+                    (onClick)="toggleCompleted(todo.id)">
+                  </p-button>
+                </div>
+
+                <!-- Content -->
+                <div class="flex-1 min-w-0">
+                  <div class="flex items-center gap-2 flex-wrap">
+                    <span
+                      class="font-semibold text-gray-800 truncate"
+                      [class.line-through]="todo.completed"
+                      [class.text-gray-400]="todo.completed">
+                      {{ todo.text }}
+                    </span>
+                    <p-tag
+                      [value]="getPriorityLabel(todo.priority)"
+                      [severity]="getPrioritySeverity(todo.priority)">
+                    </p-tag>
+                    <p-tag
+                      [value]="todo.completed ? 'Concluída' : 'Pendente'"
+                      [severity]="todo.completed ? 'success' : 'warning'">
+                    </p-tag>
+                  </div>
+
+                  @if (todo.description) {
+                    <p class="text-sm text-gray-400 mt-1.5 line-clamp-1">{{ todo.description }}</p>
+                  }
+
+                  <p class="text-xs text-gray-300 mt-2 font-mono">
+                    #{{ todo.id }} · {{ todo.createdAt | date:'dd/MM/yyyy HH:mm' }}
+                  </p>
+                </div>
+
+                <!-- Action buttons -->
+                <div class="flex items-center gap-0.5 flex-shrink-0">
+                  <p-button
+                    icon="pi pi-eye"
+                    [text]="true"
+                    [rounded]="true"
+                    severity="info"
+                    pTooltip="Detalhar"
+                    tooltipPosition="top"
+                    (onClick)="openDetailDialog(todo)">
+                  </p-button>
+                  <p-button
+                    icon="pi pi-pencil"
+                    [text]="true"
+                    [rounded]="true"
+                    pTooltip="Editar"
+                    tooltipPosition="top"
+                    (onClick)="openEditDialog(todo)">
+                  </p-button>
+                  <p-button
+                    icon="pi pi-trash"
+                    [text]="true"
+                    [rounded]="true"
+                    severity="danger"
+                    pTooltip="Excluir"
+                    tooltipPosition="top"
+                    (onClick)="confirmDelete(todo)">
+                  </p-button>
+                </div>
+              </div>
+            </div>
+          }
+        </div>
+
+      </div>
+    </div>
+
+    <!-- Add / Edit Dialog -->
+    <p-dialog
+      [header]="dialogMode === 'add' ? 'Nova Tarefa' : 'Editar Tarefa'"
+      [(visible)]="showFormDialog"
+      [modal]="true"
+      [draggable]="false"
+      [resizable]="false"
+      [style]="{width: '520px'}">
+
+      <div class="flex flex-col gap-5 pt-4">
+        <div class="flex flex-col gap-2">
+          <label class="text-sm font-semibold text-gray-700">
+            Título <span class="text-red-500">*</span>
+          </label>
+          <input
+            pInputText
+            [(ngModel)]="form.text"
+            placeholder="Digite o título da tarefa..."
+            class="w-full" />
+        </div>
+
+        <div class="flex flex-col gap-2">
+          <label class="text-sm font-semibold text-gray-700">Descrição</label>
+          <textarea
+            pInputTextarea
+            [(ngModel)]="form.description"
+            placeholder="Adicione uma descrição opcional..."
+            rows="3"
+            class="w-full resize-none">
+          </textarea>
+        </div>
+
+        <div class="flex flex-col gap-2">
+          <label class="text-sm font-semibold text-gray-700">Prioridade</label>
+          <p-dropdown
+            [options]="priorityOptions"
+            [(ngModel)]="form.priority"
+            optionLabel="label"
+            optionValue="value"
+            placeholder="Selecione..."
+            styleClass="w-full">
+          </p-dropdown>
+        </div>
+
+        <div class="flex items-center gap-3">
+          <p-checkbox
+            [(ngModel)]="form.completed"
+            [binary]="true"
+            inputId="formCompleted">
+          </p-checkbox>
+          <label for="formCompleted" class="text-sm text-gray-700 cursor-pointer select-none">
+            Marcar como concluída
+          </label>
+        </div>
       </div>
 
-      <!-- Dica -->
-      <p class="mt-6 text-xs text-gray-400 text-center" @fadeSlide>
-        Pressione <kbd class="px-1.5 py-0.5 bg-white border border-gray-200 rounded text-gray-500 shadow-sm">Enter</kbd> para adicionar
-        &nbsp;·&nbsp; Duplo clique para editar
-      </p>
-    </div>
+      <ng-template pTemplate="footer">
+        <div class="flex justify-end gap-2">
+          <p-button label="Cancelar" [text]="true" (onClick)="closeFormDialog()"></p-button>
+          <p-button
+            label="Salvar"
+            icon="pi pi-check"
+            [disabled]="!form.text.trim()"
+            (onClick)="saveForm()">
+          </p-button>
+        </div>
+      </ng-template>
+    </p-dialog>
+
+    <!-- Detail Dialog -->
+    <p-dialog
+      header="Detalhes da Tarefa"
+      [(visible)]="showDetailDialog"
+      [modal]="true"
+      [draggable]="false"
+      [resizable]="false"
+      [style]="{width: '480px'}">
+
+      @if (selectedTodo) {
+        <div class="py-2 flex flex-col gap-4">
+
+          <div>
+            <label class="text-xs font-semibold text-gray-400 uppercase tracking-widest">Título</label>
+            <p class="text-gray-900 font-semibold mt-2 text-lg leading-snug">{{ selectedTodo.text }}</p>
+          </div>
+
+          <p-divider styleClass="my-0"></p-divider>
+
+          <div>
+            <label class="text-xs font-semibold text-gray-400 uppercase tracking-widest">Descrição</label>
+            <p class="text-gray-600 mt-2 leading-relaxed">
+              {{ selectedTodo.description || 'Sem descrição' }}
+            </p>
+          </div>
+
+          <p-divider styleClass="my-0"></p-divider>
+
+          <div class="grid grid-cols-2 gap-6">
+            <div>
+              <label class="text-xs font-semibold text-gray-400 uppercase tracking-widest">Prioridade</label>
+              <div class="mt-2">
+                <p-tag
+                  [value]="getPriorityLabel(selectedTodo.priority)"
+                  [severity]="getPrioritySeverity(selectedTodo.priority)">
+                </p-tag>
+              </div>
+            </div>
+            <div>
+              <label class="text-xs font-semibold text-gray-400 uppercase tracking-widest">Status</label>
+              <div class="mt-2">
+                <p-tag
+                  [value]="selectedTodo.completed ? 'Concluída' : 'Pendente'"
+                  [severity]="selectedTodo.completed ? 'success' : 'warning'">
+                </p-tag>
+              </div>
+            </div>
+          </div>
+
+          <p-divider styleClass="my-0"></p-divider>
+
+          <div class="grid grid-cols-2 gap-6">
+            <div>
+              <label class="text-xs font-semibold text-gray-400 uppercase tracking-widest">ID</label>
+              <p class="text-gray-600 mt-2 font-mono text-sm">#{{ selectedTodo.id }}</p>
+            </div>
+            <div>
+              <label class="text-xs font-semibold text-gray-400 uppercase tracking-widest">Criado em</label>
+              <p class="text-gray-600 mt-2 text-sm">{{ selectedTodo.createdAt | date:'dd/MM/yyyy' }}</p>
+              <p class="text-gray-400 text-xs">{{ selectedTodo.createdAt | date:'HH:mm' }}</p>
+            </div>
+          </div>
+
+        </div>
+      }
+
+      <ng-template pTemplate="footer">
+        <div class="flex justify-end gap-2">
+          <p-button
+            label="Editar"
+            icon="pi pi-pencil"
+            [outlined]="true"
+            (onClick)="editFromDetail()">
+          </p-button>
+          <p-button label="Fechar" (onClick)="showDetailDialog = false"></p-button>
+        </div>
+      </ng-template>
+    </p-dialog>
   `
 })
 export class AppComponent {
-  newTodoText = '';
-  editingText = '';
+  private confirmationService = inject(ConfirmationService);
+  private messageService = inject(MessageService);
+
   private nextId = 4;
 
   todos = signal<Todo[]>([
-    { id: 1, text: 'Criar minha primeira tarefa', completed: false },
-    { id: 2, text: 'Explorar os filtros de tarefas', completed: false },
-    { id: 3, text: 'Marcar uma tarefa como concluída', completed: true },
+    {
+      id: 1,
+      text: 'Estudar Angular 17 com Signals',
+      description: 'Aprender sobre signals, computed e effects para gerenciamento de estado reativo.',
+      priority: 3,
+      completed: false,
+      createdAt: new Date('2026-05-10T09:00:00'),
+    },
+    {
+      id: 2,
+      text: 'Configurar PrimeNG no projeto',
+      description: 'Instalar e configurar o tema lara-light-blue com os componentes necessários.',
+      priority: 2,
+      completed: true,
+      createdAt: new Date('2026-05-11T14:30:00'),
+    },
+    {
+      id: 3,
+      text: 'Criar layout responsivo com Tailwind',
+      description: '',
+      priority: 1,
+      completed: false,
+      createdAt: new Date('2026-05-12T08:00:00'),
+    },
   ]);
 
   currentFilter = signal<FilterType>('all');
-  editingId = signal<number | null>(null);
 
   activeTodosCount = computed(() => this.todos().filter(t => !t.completed).length);
   completedTodosCount = computed(() => this.todos().filter(t => t.completed).length);
@@ -242,65 +396,133 @@ export class AppComponent {
     });
   });
 
-  addTodo() {
-    const text = this.newTodoText.trim();
-    if (!text) return;
-    this.todos.update(todos => [
-      { id: this.nextId++, text, completed: false },
-      ...todos
-    ]);
-    this.newTodoText = '';
+  priorityOptions = [
+    { label: 'Baixa', value: 1 },
+    { label: 'Média', value: 2 },
+    { label: 'Alta', value: 3 },
+  ];
+
+  showFormDialog = false;
+  showDetailDialog = false;
+  dialogMode: 'add' | 'edit' = 'add';
+  editingId: number | null = null;
+  selectedTodo: Todo | null = null;
+
+  form = {
+    text: '',
+    description: '',
+    priority: 2,
+    completed: false,
+  };
+
+  getPriorityLabel(priority: number): string {
+    return (['', 'Baixa', 'Média', 'Alta'])[priority] ?? 'Baixa';
   }
 
-  toggleTodo(id: number) {
-    this.todos.update(todos =>
-      todos.map(t => t.id === id ? { ...t, completed: !t.completed } : t)
-    );
-  }
-
-  deleteTodo(id: number) {
-    this.todos.update(todos => todos.filter(t => t.id !== id));
-    if (this.editingId() === id) this.editingId.set(null);
-  }
-
-  startEdit(todo: Todo) {
-    this.editingId.set(todo.id);
-    this.editingText = todo.text;
-    setTimeout(() => {
-      const input = document.getElementById(`edit-${todo.id}`) as HTMLInputElement;
-      input?.focus();
-      input?.select();
-    }, 50);
-  }
-
-  saveEdit(id: number) {
-    const text = this.editingText.trim();
-    if (text) {
-      this.todos.update(todos =>
-        todos.map(t => t.id === id ? { ...t, text } : t)
-      );
-    }
-    this.editingId.set(null);
-    this.editingText = '';
-  }
-
-  cancelEdit() {
-    this.editingId.set(null);
-    this.editingText = '';
+  getPrioritySeverity(priority: number): 'success' | 'warning' | 'danger' {
+    const map: Record<number, 'success' | 'warning' | 'danger'> = { 1: 'success', 2: 'warning', 3: 'danger' };
+    return map[priority] ?? 'success';
   }
 
   setFilter(filter: FilterType) {
     this.currentFilter.set(filter);
   }
 
-  clearCompleted() {
-    this.todos.update(todos => todos.filter(t => !t.completed));
+  toggleCompleted(id: number) {
+    this.todos.update(todos =>
+      todos.map(t => t.id === id ? { ...t, completed: !t.completed } : t)
+    );
   }
 
-  toggleAll() {
-    const hasActive = this.activeTodosCount() > 0;
-    this.todos.update(todos =>
-      todos.map(t => ({ ...t, completed: hasActive }))
-    );
+  openAddDialog() {
+    this.dialogMode = 'add';
+    this.form = { text: '', description: '', priority: 2, completed: false };
+    this.showFormDialog = true;
+  }
+
+  openEditDialog(todo: Todo) {
+    this.dialogMode = 'edit';
+    this.editingId = todo.id;
+    this.form = {
+      text: todo.text,
+      description: todo.description,
+      priority: todo.priority,
+      completed: todo.completed,
+    };
+    this.showDetailDialog = false;
+    this.showFormDialog = true;
+  }
+
+  closeFormDialog() {
+    this.showFormDialog = false;
+  }
+
+  saveForm() {
+    const text = this.form.text.trim();
+    if (!text) return;
+
+    if (this.dialogMode === 'add') {
+      const newTodo: Todo = {
+        id: this.nextId++,
+        text,
+        description: this.form.description.trim(),
+        priority: this.form.priority,
+        completed: this.form.completed,
+        createdAt: new Date(),
+      };
+      this.todos.update(todos => [newTodo, ...todos]);
+      this.messageService.add({
+        severity: 'success',
+        summary: 'Tarefa adicionada',
+        detail: `"${text}" foi criada com sucesso.`,
+        life: 3000,
+      });
+    } else {
+      this.todos.update(todos =>
+        todos.map(t => t.id === this.editingId
+          ? { ...t, text, description: this.form.description.trim(), priority: this.form.priority, completed: this.form.completed }
+          : t
+        )
+      );
+      this.messageService.add({
+        severity: 'info',
+        summary: 'Tarefa atualizada',
+        detail: `"${text}" foi atualizada.`,
+        life: 3000,
+      });
+    }
+
+    this.showFormDialog = false;
+  }
+
+  openDetailDialog(todo: Todo) {
+    this.selectedTodo = todo;
+    this.showDetailDialog = true;
+  }
+
+  editFromDetail() {
+    if (this.selectedTodo) {
+      this.openEditDialog(this.selectedTodo);
+    }
+  }
+
+  confirmDelete(todo: Todo) {
+    this.confirmationService.confirm({
+      message: `Deseja excluir a tarefa "<strong>${todo.text}</strong>"?`,
+      header: 'Confirmar Exclusão',
+      icon: 'pi pi-exclamation-triangle',
+      acceptLabel: 'Excluir',
+      rejectLabel: 'Cancelar',
+      acceptButtonStyleClass: 'p-button-danger',
+      accept: () => {
+        this.todos.update(todos => todos.filter(t => t.id !== todo.id));
+        this.messageService.add({
+          severity: 'warn',
+          summary: 'Tarefa removida',
+          detail: `"${todo.text}" foi excluída.`,
+          life: 3000,
+        });
+      },
+    });
   }
 }
