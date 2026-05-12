@@ -42,7 +42,7 @@ export type FilterType = 'all' | 'active' | 'completed';
       <!-- Header -->
       <div class="w-full max-w-lg mb-8 text-center" @fadeSlide>
         <h1 class="text-4xl font-bold text-gray-800 tracking-tight mb-1">
-          ✅ To Do List
+          To Do List
         </h1>
         <p class="text-gray-400 text-sm">Organize suas tarefas com simplicidade</p>
       </div>
