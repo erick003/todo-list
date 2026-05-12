@@ -1,0 +1,31 @@
+kind = "web"
+previewPath = "/"
+title = "To Do List"
+version = "1.0.0"
+id = "artifacts/todo-angular"
+router = "path"
+
+[[integratedSkills]]
+name = "react-vite"
+version = "1.0.0"
+
+[[services]]
+name = "web"
+paths = [ "/" ]
+localPort = 22133
+
+[services.development]
+run = "pnpm --filter @workspace/todo-angular run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/todo-angular", "run", "build" ]
+publicDir = "artifacts/todo-angular/dist/public"
+serve = "static"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "22133"
+BASE_PATH = "/"
