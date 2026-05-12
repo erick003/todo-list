@@ -1,5 +1,5 @@
 export default {
   server: {
-    allowedHosts: "all",
+    allowedHosts: true,
   },
 };

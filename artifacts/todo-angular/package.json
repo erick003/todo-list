@@ -3,7 +3,7 @@
   "version": "0.0.0",
   "private": true,
   "scripts": {
-    "dev": "NG_CLI_ANALYTICS=false ng serve --host 0.0.0.0 --port ${PORT:-4200} --allowed-hosts all",
+    "dev": "NG_CLI_ANALYTICS=false ng build --configuration development --output-path dist && (NG_CLI_ANALYTICS=false ng build --watch --configuration development --output-path dist &) && node serve.mjs",
     "build": "ng build --output-path dist",
     "typecheck": "tsc --noEmit"
   },
