@@ -19,7 +19,7 @@ run = "pnpm --filter @workspace/todo-angular run dev"
 
 [services.production]
 build = [ "pnpm", "--filter", "@workspace/todo-angular", "run", "build" ]
-publicDir = "artifacts/todo-angular/dist/public"
+publicDir = "artifacts/todo-angular/dist/browser"
 serve = "static"
 
 [[services.production.rewrites]]
