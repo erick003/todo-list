@@ -1,1 +1,32 @@
-@import "tailwindcss/utilities";
+@import "tailwindcss";
+
+@source inline("{
+  min-h-screen bg-gradient-to-br from-slate-100 to-blue-50 p-6
+  max-w-4xl mx-auto
+  flex flex-col flex-1 flex-shrink-0 flex-wrap
+  items-center items-start items-end
+  justify-between justify-end
+  gap-0.5 gap-2 gap-3 gap-4 gap-5 gap-6
+  mb-1 mb-2 mb-4 mb-5 mb-6 mb-8
+  mt-1 mt-1.5 mt-2 mt-4
+  p-4 p-5 p-6 p-16 pt-0.5 pt-4 py-2
+  w-full
+  grid grid-cols-2 grid-cols-3
+  bg-white
+  rounded-2xl
+  shadow-sm hover:shadow-md
+  border border-gray-100 border-emerald-200
+  transition-all duration-200
+  text-center text-sm text-xs text-lg
+  font-bold font-semibold font-medium font-mono
+  tracking-tight tracking-widest
+  leading-snug leading-relaxed
+  text-gray-900 text-gray-800 text-gray-700 text-gray-600 text-gray-500 text-gray-400 text-gray-300 text-gray-200
+  text-blue-600 text-orange-500 text-emerald-600 text-red-500
+  text-3xl text-6xl
+  uppercase
+  truncate line-clamp-1 line-through
+  cursor-pointer select-none
+  resize-none
+  block
+}");

@@ -3,7 +3,7 @@
   "version": "0.0.0",
   "private": true,
   "scripts": {
-    "dev": "NG_CLI_ANALYTICS=false ng build --configuration development --output-path dist && (NG_CLI_ANALYTICS=false ng build --watch --configuration development --output-path dist &) && node serve.mjs",
+    "dev": "node_modules/.bin/tailwindcss -i src/tailwind-input.css -o src/tailwind-output.css && (node_modules/.bin/tailwindcss -i src/tailwind-input.css -o src/tailwind-output.css --watch &) && NG_CLI_ANALYTICS=false ng build --configuration development --output-path dist && (NG_CLI_ANALYTICS=false ng build --watch --configuration development --output-path dist &) && node serve.mjs",
     "build": "NG_CLI_ANALYTICS=false ng build --output-path dist",
     "typecheck": "tsc --noEmit"
   },
@@ -16,8 +16,8 @@
     "@angular/platform-browser": "^17.3.0",
     "@angular/platform-browser-dynamic": "^17.3.0",
     "@angular/router": "^17.3.0",
-    "primeng": "^17.18.0",
     "primeicons": "^7.0.0",
+    "primeng": "^17.18.0",
     "rxjs": "~7.8.0",
     "tslib": "^2.3.0",
     "zone.js": "~0.14.0"
@@ -26,6 +26,7 @@
     "@angular-devkit/build-angular": "^17.3.0",
     "@angular/cli": "^17.3.0",
     "@angular/compiler-cli": "^17.3.0",
+    "@tailwindcss/cli": "^4.3.0",
     "@tailwindcss/postcss": "^4.0.0",
     "@types/node": "^18.18.0",
     "postcss": "^8.4.35",
