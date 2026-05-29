@@ -1,0 +1,139 @@
+<div class="min-h-screen bg-gradient-to-br from-slate-100 to-blue-50 p-6">
+  <div class="max-w-4xl mx-auto">
+
+    <!-- Header -->
+    <header class="flex items-center justify-between mb-8">
+      <div>
+        <h1 class="text-3xl font-bold text-gray-900 tracking-tight">To Do List</h1>
+        <p class="text-gray-500 text-sm mt-1">Gerencie suas tarefas com eficiência</p>
+      </div>
+      <p-button label="Nova Tarefa" icon="pi pi-plus" (onClick)="addNew.emit()"></p-button>
+    </header>
+
+    <!-- Stats -->
+    <div class="grid grid-cols-3 gap-4 mb-6">
+      <div class="bg-white rounded-2xl p-5 shadow-sm border border-gray-100 text-center">
+        <p class="text-3xl font-bold text-blue-600">{{ totalCount() }}</p>
+        <p class="text-xs text-gray-400 mt-1 uppercase tracking-widest font-medium">Total</p>
+      </div>
+      <div class="bg-white rounded-2xl p-5 shadow-sm border border-gray-100 text-center">
+        <p class="text-3xl font-bold text-orange-500">{{ activeCount() }}</p>
+        <p class="text-xs text-gray-400 mt-1 uppercase tracking-widest font-medium">Pendentes</p>
+      </div>
+      <div class="bg-white rounded-2xl p-5 shadow-sm border border-gray-100 text-center">
+        <p class="text-3xl font-bold text-emerald-600">{{ completedCount() }}</p>
+        <p class="text-xs text-gray-400 mt-1 uppercase tracking-widest font-medium">Concluídas</p>
+      </div>
+    </div>
+
+    <!-- Filters -->
+    <div class="flex items-center gap-2 mb-5">
+      <p-button
+        label="Todas"
+        size="small"
+        [outlined]="filter() !== 'all'"
+        (onClick)="filterChange.emit('all')">
+      </p-button>
+      <p-button
+        label="Pendentes"
+        size="small"
+        [outlined]="filter() !== 'active'"
+        (onClick)="filterChange.emit('active')">
+      </p-button>
+      <p-button
+        label="Concluídas"
+        size="small"
+        [outlined]="filter() !== 'completed'"
+        (onClick)="filterChange.emit('completed')">
+      </p-button>
+    </div>
+
+    <!-- Empty state -->
+    @if (filteredTodos().length === 0) {
+      <div class="bg-white rounded-2xl p-16 shadow-sm border border-gray-100 text-center">
+        <i class="pi pi-inbox text-6xl text-gray-200 mb-4 block"></i>
+        <p class="text-gray-400 font-medium">Nenhuma tarefa encontrada</p>
+        <p class="text-gray-300 text-sm mt-1">Clique em "Nova Tarefa" para começar</p>
+      </div>
+    }
+
+    <!-- Todo cards -->
+    <div class="flex flex-col gap-3">
+      @for (todo of filteredTodos(); track todo.id) {
+        <div
+          class="bg-white rounded-2xl p-5 shadow-sm border transition-all duration-200 hover:shadow-md"
+          [class.border-emerald-200]="todo.completed"
+          [class.border-gray-100]="!todo.completed">
+
+          <div class="flex items-start gap-4">
+
+            <!-- Toggle concluída -->
+            <div class="pt-0.5 flex-shrink-0">
+              <p-button
+                [icon]="todo.completed ? 'pi pi-check-circle' : 'pi pi-circle'"
+                [text]="true"
+                [rounded]="true"
+                [severity]="todo.completed ? 'success' : 'secondary'"
+                pTooltip="Marcar / desmarcar"
+                tooltipPosition="top"
+                (onClick)="toggle.emit(todo.id)">
+              </p-button>
+            </div>
+
+            <!-- Conteúdo -->
+            <div class="flex-1 min-w-0">
+              <div class="flex items-center gap-2 flex-wrap">
+                <span
+                  class="font-semibold text-gray-800 truncate"
+                  [class.line-through]="todo.completed"
+                  [class.text-gray-400]="todo.completed">
+                  {{ todo.text }}
+                </span>
+                <p-tag
+                  [value]="getPriorityLabel(todo.priority)"
+                  [severity]="getPrioritySeverity(todo.priority)">
+                </p-tag>
+                <p-tag
+                  [value]="todo.completed ? 'Concluída' : 'Pendente'"
+                  [severity]="todo.completed ? 'success' : 'warning'">
+                </p-tag>
+              </div>
+
+              @if (todo.description) {
+                <p class="text-sm text-gray-400 mt-1.5 line-clamp-1">{{ todo.description }}</p>
+              }
+
+              <p class="text-xs text-gray-300 mt-2 font-mono">
+                #{{ todo.id }} · {{ todo.createdAt | date:'dd/MM/yyyy HH:mm' }}
+              </p>
+            </div>
+
+            <!-- Ações -->
+            <div class="flex items-center gap-0.5 flex-shrink-0">
+              <p-button
+                icon="pi pi-eye"
+                [text]="true" [rounded]="true" severity="info"
+                pTooltip="Detalhar" tooltipPosition="top"
+                (onClick)="detail.emit(todo)">
+              </p-button>
+              <p-button
+                icon="pi pi-pencil"
+                [text]="true" [rounded]="true"
+                pTooltip="Editar" tooltipPosition="top"
+                (onClick)="edit.emit(todo)">
+              </p-button>
+              <p-button
+                icon="pi pi-trash"
+                [text]="true" [rounded]="true" severity="danger"
+                pTooltip="Excluir" tooltipPosition="top"
+                (onClick)="remove.emit(todo)">
+              </p-button>
+            </div>
+
+          </div>
+        </div>
+      }
+    </div>
+
+  </div>
+</div>

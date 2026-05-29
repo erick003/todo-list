@@ -1,48 +1,21 @@
-import { Component, signal, computed, inject } from '@angular/core';
-import { CommonModule, DatePipe } from '@angular/common';
-import { FormsModule } from '@angular/forms';
-import { ButtonModule } from 'primeng/button';
-import { InputTextModule } from 'primeng/inputtext';
-import { InputTextareaModule } from 'primeng/inputtextarea';
-import { DialogModule } from 'primeng/dialog';
-import { DropdownModule } from 'primeng/dropdown';
-import { CheckboxModule } from 'primeng/checkbox';
-import { TagModule } from 'primeng/tag';
+import { Component, signal, inject } from '@angular/core';
 import { ToastModule } from 'primeng/toast';
 import { ConfirmDialogModule } from 'primeng/confirmdialog';
-import { TooltipModule } from 'primeng/tooltip';
-import { DividerModule } from 'primeng/divider';
 import { ConfirmationService, MessageService } from 'primeng/api';
-
-export interface Todo {
-  id: number;
-  text: string;
-  description: string;
-  priority: number;
-  completed: boolean;
-  createdAt: Date;
-}
-
-export type FilterType = 'all' | 'active' | 'completed';
+import { Todo, FilterType, TodoFormData } from './models/todo.model';
+import { TodoListComponent } from './todo-list/todo-list.component';
+import { TodoDetailComponent } from './todo-detail/todo-detail.component';
+import { TodoFormComponent } from './todo-form/todo-form.component';
 
 @Component({
   selector: 'app-root',
   standalone: true,
   imports: [
-    CommonModule,
-    DatePipe,
-    FormsModule,
-    ButtonModule,
-    InputTextModule,
-    InputTextareaModule,
-    DialogModule,
-    DropdownModule,
-    CheckboxModule,
-    TagModule,
     ToastModule,
     ConfirmDialogModule,
-    TooltipModule,
-    DividerModule,
+    TodoListComponent,
+    TodoDetailComponent,
+    TodoFormComponent,
   ],
   providers: [ConfirmationService, MessageService],
   templateUrl: './app.component.html',
@@ -50,9 +23,9 @@ export type FilterType = 'all' | 'active' | 'completed';
 export class AppComponent {
   private confirmationService = inject(ConfirmationService);
   private messageService      = inject(MessageService);
+  private nextId              = 4;
 
-  private nextId = 4;
-
+  // ── State ─────────────────────────────────────────────────────────────────
   todos = signal<Todo[]>([
     {
       id: 1,
@@ -80,193 +53,69 @@ export class AppComponent {
     },
   ]);
 
-  currentFilter = signal<FilterType>('all');
+  currentFilter    = signal<FilterType>('all');
+  showFormDialog   = signal(false);
+  showDetailDialog = signal(false);
+  dialogMode       = signal<'add' | 'edit'>('add');
+  editTarget       = signal<Todo | null>(null);
+  selectedTodo     = signal<Todo | null>(null);
 
-  activeTodosCount  = computed(() => this.todos().filter(t => !t.completed).length);
-  completedTodosCount = computed(() => this.todos().filter(t => t.completed).length);
-
-  filteredTodos = computed(() => {
-    const f = this.currentFilter();
-    return this.todos().filter(t => {
-      if (f === 'active')    return !t.completed;
-      if (f === 'completed') return t.completed;
-      return true;
-    });
-  });
-
-  priorityOptions = [
-    { label: 'Baixa', value: 1 },
-    { label: 'Média', value: 2 },
-    { label: 'Alta',  value: 3 },
-  ];
-
-  // ── Dialog state ─────────────────────────────────────────────────────────
-  showFormDialog   = false;
-  showDetailDialog = false;
-  dialogMode: 'add' | 'edit' = 'add';
-  editingId: number | null   = null;
-  selectedTodo: Todo | null  = null;
-
-  // ── Signal Form ───────────────────────────────────────────────────────────
-  // Field values
-  formText        = signal('');
-  formDescription = signal('');
-  formPriority    = signal<number>(2);
-  formCompleted   = signal(false);
-
-  // Touched state (error only shows after field interaction)
-  textTouched        = signal(false);
-  descriptionTouched = signal(false);
-  priorityTouched    = signal(false);
-
-  // Computed validation errors — null means valid
-  textError = computed<string | null>(() => {
-    const v = this.formText().trim();
-    if (!v)             return 'O título é obrigatório.';
-    if (v.length < 3)   return 'O título deve ter no mínimo 3 caracteres.';
-    if (v.length > 100) return 'O título deve ter no máximo 100 caracteres.';
-    return null;
-  });
-
-  descriptionError = computed<string | null>(() => {
-    const v = this.formDescription();
-    if (v.length > 500) return 'A descrição deve ter no máximo 500 caracteres.';
-    return null;
-  });
-
-  priorityError = computed<string | null>(() => {
-    const v = this.formPriority();
-    if (v === null || v === undefined) return 'Selecione uma prioridade.';
-    return null;
-  });
-
-  // Form is valid only when all fields pass their rules
-  isFormValid = computed(() =>
-    this.textError()        === null &&
-    this.descriptionError() === null &&
-    this.priorityError()    === null
-  );
-
-  // ── Helpers ───────────────────────────────────────────────────────────────
-  getPriorityLabel(priority: number): string {
-    return (['', 'Baixa', 'Média', 'Alta'])[priority] ?? 'Baixa';
+  // ── Dialog coordination ───────────────────────────────────────────────────
+  openAdd() {
+    this.editTarget.set(null);
+    this.dialogMode.set('add');
+    this.showFormDialog.set(true);
   }
 
-  getPrioritySeverity(priority: number): 'success' | 'warning' | 'danger' {
-    const map: Record<number, 'success' | 'warning' | 'danger'> = {
-      1: 'success',
-      2: 'warning',
-      3: 'danger',
-    };
-    return map[priority] ?? 'success';
+  openEdit(todo: Todo) {
+    this.editTarget.set(todo);
+    this.dialogMode.set('edit');
+    this.showDetailDialog.set(false);
+    this.showFormDialog.set(true);
   }
 
-  setFilter(filter: FilterType) {
-    this.currentFilter.set(filter);
+  openDetail(todo: Todo) {
+    this.selectedTodo.set(todo);
+    this.showDetailDialog.set(true);
   }
 
-  toggleCompleted(id: number) {
+  // ── CRUD handlers (called by child output events) ─────────────────────────
+  handleToggle(id: number) {
     this.todos.update(todos =>
       todos.map(t => t.id === id ? { ...t, completed: !t.completed } : t)
     );
   }
 
-  // ── Form lifecycle ────────────────────────────────────────────────────────
-  private resetSignalForm() {
-    this.formText.set('');
-    this.formDescription.set('');
-    this.formPriority.set(2);
-    this.formCompleted.set(false);
-    this.textTouched.set(false);
-    this.descriptionTouched.set(false);
-    this.priorityTouched.set(false);
-  }
-
-  openAddDialog() {
-    this.dialogMode = 'add';
-    this.resetSignalForm();
-    this.showFormDialog = true;
-  }
-
-  openEditDialog(todo: Todo) {
-    this.dialogMode = 'edit';
-    this.editingId  = todo.id;
-    this.formText.set(todo.text);
-    this.formDescription.set(todo.description);
-    this.formPriority.set(todo.priority);
-    this.formCompleted.set(todo.completed);
-    this.textTouched.set(false);
-    this.descriptionTouched.set(false);
-    this.priorityTouched.set(false);
-    this.showDetailDialog = false;
-    this.showFormDialog   = true;
-  }
-
-  closeFormDialog() {
-    this.showFormDialog = false;
-  }
-
-  /** Touch all fields to surface errors before saving (called on footer Save click). */
-  touchAllFields() {
-    this.textTouched.set(true);
-    this.descriptionTouched.set(true);
-    this.priorityTouched.set(true);
-  }
-
-  saveForm() {
-    this.touchAllFields();
-    if (!this.isFormValid()) return;
-
-    const text        = this.formText().trim();
-    const description = this.formDescription().trim();
-    const priority    = this.formPriority();
-    const completed   = this.formCompleted();
-
-    if (this.dialogMode === 'add') {
+  handleSave(data: TodoFormData) {
+    if (this.dialogMode() === 'add') {
       const newTodo: Todo = {
         id: this.nextId++,
-        text,
-        description,
-        priority,
-        completed,
+        ...data,
         createdAt: new Date(),
       };
       this.todos.update(todos => [newTodo, ...todos]);
       this.messageService.add({
         severity: 'success',
         summary: 'Tarefa adicionada',
-        detail: `"${text}" foi criada com sucesso.`,
+        detail: `"${data.text}" foi criada com sucesso.`,
         life: 3000,
       });
     } else {
+      const target = this.editTarget();
+      if (!target) return;
       this.todos.update(todos =>
-        todos.map(t =>
-          t.id === this.editingId
-            ? { ...t, text, description, priority, completed }
-            : t
-        )
+        todos.map(t => t.id === target.id ? { ...t, ...data } : t)
       );
       this.messageService.add({
         severity: 'info',
         summary: 'Tarefa atualizada',
-        detail: `"${text}" foi atualizada.`,
+        detail: `"${data.text}" foi atualizada.`,
         life: 3000,
       });
     }
-
-    this.showFormDialog = false;
   }
 
-  openDetailDialog(todo: Todo) {
-    this.selectedTodo    = todo;
-    this.showDetailDialog = true;
-  }
-
-  editFromDetail() {
-    if (this.selectedTodo) this.openEditDialog(this.selectedTodo);
-  }
-
-  confirmDelete(todo: Todo) {
+  handleDelete(todo: Todo) {
     this.confirmationService.confirm({
       message: `Deseja excluir a tarefa "${todo.text}"?`,
       header: 'Confirmar Exclusão',
