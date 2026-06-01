@@ -1,34 +1,24 @@
 /**
  * TodoDetailComponent — operação DETALHAR
  *
- * Requisito atendido: componente dedicado à exibição completa dos
- * dados de uma tarefa em um dialog modal (PrimeNG <p-dialog>).
+ * Uso do service: injeta TodoService e chama getById() em onEdit() para
+ * garantir que os dados enviados ao formulário são sempre a versão mais
+ * recente armazenada no service — não a snapshot passada como input().
  *
- * COMUNICAÇÃO COM O PAI (AppComponent):
- *
- *   model()  — binding BIDIRECIONAL para o estado de visibilidade do dialog:
- *     • visible : boolean
- *       - O pai ESCREVE true para abrir o dialog.
- *       - O componente ESCREVE false para fechar (ao clicar em "Fechar"
- *         ou ao pressionar ESC), e o pai é notificado automaticamente.
- *       - No template do pai: [(visible)]="showDetailDialog"
- *         O [()] é o "banana-in-a-box": combina [input] + (output) em um
- *         único binding, sem precisar declarar input + output separados.
- *
- *   input()  — dado somente-leitura recebido do pai:
- *     • todo : Todo | null — tarefa selecionada para exibição
- *
- *   output() — evento emitido quando o usuário solicita edição:
- *     • editRequest : Todo — pai abre o TodoFormComponent no modo ALTERAR
+ * COMUNICAÇÃO COM O AppComponent:
+ *   model()  ↔ visible      — two-way binding para abrir/fechar o dialog
+ *   input()  ← todo         — tarefa selecionada para exibição
+ *   output() → editRequest  — solicita ao pai que abra o formulário de edição
  */
 
-import { Component, input, output, model } from '@angular/core';
+import { Component, input, output, model, inject } from '@angular/core';
 import { CommonModule, DatePipe } from '@angular/common';
 import { DialogModule } from 'primeng/dialog';
 import { ButtonModule } from 'primeng/button';
 import { TagModule } from 'primeng/tag';
 import { DividerModule } from 'primeng/divider';
 import { Todo } from '../models';
+import { TodoService } from '../services/todo.service';
 
 @Component({
   selector: 'app-todo-detail',
@@ -37,24 +27,27 @@ import { Todo } from '../models';
   templateUrl: './todo-detail.component.html',
 })
 export class TodoDetailComponent {
-  // ── model() — binding bidirecional ────────────────────────────────────────
-  // model<T>() cria simultaneamente um input e um output com o mesmo nome.
-  // Permite que pai e filho leiam E escrevam o valor, mantendo-os em sincronia.
-  // Uso no pai: [(visible)]="showDetailDialog"
+  // Service injetado — usado para obter a versão mais recente da tarefa em onEdit().
+  private todoService = inject(TodoService);
+
+  // ── model() — two-way binding de visibilidade ─────────────────────────────
   visible = model(false);
 
-  // ── input() — dado somente-leitura recebido do pai ────────────────────────
+  // ── input() — tarefa selecionada para exibição ────────────────────────────
   todo = input<Todo | null>(null);
 
-  // ── output() — evento de saída para o pai ────────────────────────────────
+  // ── output() — solicita abertura do formulário de edição no pai ───────────
   editRequest = output<Todo>();
 
-  // ── Ações do dialog ───────────────────────────────────────────────────────
+  // ── Ações ─────────────────────────────────────────────────────────────────
   onEdit() {
     const t = this.todo();
     if (t) {
-      this.editRequest.emit(t);   // notifica o pai para abrir o form em modo edição
-      this.visible.set(false);    // fecha este dialog via model()
+      // Busca a versão mais recente no service (getById) para garantir
+      // que alterações feitas após a abertura do detalhe sejam refletidas.
+      const fresh = this.todoService.getById(t.id) ?? t;
+      this.editRequest.emit(fresh);
+      this.visible.set(false);
     }
   }
 

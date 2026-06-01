@@ -1,33 +1,31 @@
 /**
  * TodoListComponent — operação LISTAR
  *
- * Requisito atendido: componente dedicado exclusivamente à listagem
- * das tarefas, com filtros e estatísticas.
+ * Uso do service: injeta TodoService para chamar toggle() diretamente,
+ * sem precisar emitir um output() para o pai apenas para inverter um campo.
+ * Isso demonstra que componentes podem operar o service de forma autônoma
+ * para ações simples, enquanto ações que exigem coordenação de UI (abrir
+ * dialogs, confirmação) ainda são delegadas ao pai via output().
  *
- * COMUNICAÇÃO COM O PAI (AppComponent):
+ * COMUNICAÇÃO COM O AppComponent:
+ *   input()  ← todos  : Todo[]      — lista atual (lida do service pelo pai)
+ *   input()  ← filter : FilterType  — filtro de exibição
+ *   output() → filterChange          — usuário troca o filtro
+ *   output() → addNew                — usuário quer incluir nova tarefa
+ *   output() → detail                — usuário quer detalhar uma tarefa
+ *   output() → edit                  — usuário quer alterar uma tarefa
+ *   output() → remove                — usuário quer remover (pai confirma)
  *
- *   input()  — recebe dados somente-leitura do pai:
- *     • todos  : Todo[]     — lista completa de tarefas
- *     • filter : FilterType — filtro ativo ('all' | 'active' | 'completed')
- *
- *   output() — emite eventos para o pai reagir (sem retorno):
- *     • filterChange → pai atualiza o signal currentFilter
- *     • addNew       → pai abre o TodoFormComponent no modo INCLUIR
- *     • toggle       → pai alterna o campo `completed` da tarefa
- *     • detail       → pai abre o TodoDetailComponent (DETALHAR)
- *     • edit         → pai abre o TodoFormComponent no modo ALTERAR
- *     • remove       → pai exibe confirmação e deleta a tarefa
- *
- *   NOTA: este componente NÃO usa model() porque não precisa de binding
- *   bidirecional — apenas recebe dados e emite intenções.
+ *   toggle (sem output) — chamado diretamente via todoService.toggle(id)
  */
 
-import { Component, input, output, computed } from '@angular/core';
+import { Component, input, output, computed, inject } from '@angular/core';
 import { CommonModule, DatePipe } from '@angular/common';
 import { ButtonModule } from 'primeng/button';
 import { TagModule } from 'primeng/tag';
 import { TooltipModule } from 'primeng/tooltip';
 import { Todo, FilterType } from '../models';
+import { TodoService } from '../services/todo.service';
 
 @Component({
   selector: 'app-todo-list',
@@ -36,25 +34,22 @@ import { Todo, FilterType } from '../models';
   templateUrl: './todo-list.component.html',
 })
 export class TodoListComponent {
+  // Service injetado — usado para chamar toggle() diretamente.
+  private todoService = inject(TodoService);
+
   // ── input() — dados recebidos do pai ──────────────────────────────────────
-  // input.required<T>() garante em tempo de compilação que o pai sempre
-  // forneça o valor; equivale ao antigo @Input() com { required: true }.
   todos  = input.required<Todo[]>();
   filter = input.required<FilterType>();
 
   // ── output() — eventos emitidos para o pai ────────────────────────────────
-  // output<T>() substitui o antigo @Output() EventEmitter<T>.
-  // O pai escuta com a sintaxe (evento)="handler($event)" no template.
   filterChange = output<FilterType>();
   addNew       = output<void>();
-  toggle       = output<number>();   // emite o id da tarefa
   detail       = output<Todo>();
   edit         = output<Todo>();
   remove       = output<Todo>();
+  // Nota: toggle NÃO é mais um output() — é chamado diretamente no service.
 
-  // ── computed() — valores derivados dos inputs ─────────────────────────────
-  // computed() recalcula automaticamente sempre que os signals de que
-  // depende (todos, filter) forem atualizados pelo pai.
+  // ── computed() — derivados dos inputs ────────────────────────────────────
   totalCount     = computed(() => this.todos().length);
   activeCount    = computed(() => this.todos().filter(t => !t.completed).length);
   completedCount = computed(() => this.todos().filter(t => t.completed).length);
@@ -67,6 +62,16 @@ export class TodoListComponent {
       return true;
     });
   });
+
+  // ── Ação direta no service (operação ALTERNAR STATUS) ─────────────────────
+  /**
+   * Chama todoService.toggle() diretamente, sem intermediação do pai.
+   * O signal todos (recebido via input) será atualizado automaticamente
+   * porque o pai o lê de todoService.todos().
+   */
+  onToggle(id: number): void {
+    this.todoService.toggle(id);
+  }
 
   // ── Helpers de exibição ───────────────────────────────────────────────────
   getPriorityLabel(priority: number): string {

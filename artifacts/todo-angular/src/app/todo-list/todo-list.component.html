@@ -76,7 +76,7 @@
                 [severity]="todo.completed ? 'success' : 'secondary'"
                 pTooltip="Marcar / desmarcar"
                 tooltipPosition="top"
-                (onClick)="toggle.emit(todo.id)">
+                (onClick)="onToggle(todo.id)">
               </p-button>
             </div>
 

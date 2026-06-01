@@ -3,11 +3,10 @@
 
 <!-- Lista principal — recebe todos e filtro; emite eventos de CRUD -->
 <app-todo-list
-  [todos]="todos()"
+  [todos]="todoService.todos()"
   [filter]="currentFilter()"
   (filterChange)="currentFilter.set($event)"
   (addNew)="openAdd()"
-  (toggle)="handleToggle($event)"
   (detail)="openDetail($event)"
   (edit)="openEdit($event)"
   (remove)="handleDelete($event)">
