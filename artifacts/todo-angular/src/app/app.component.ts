@@ -1,26 +1,24 @@
 /**
  * AppComponent — COMPONENTE COORDENADOR
  *
- * Requisito atendido: "Refatore em componentes distintos as operações
- * detalhar, listar, incluir e alterar de cada modelo."
+ * Após a introdução do TodoService, este componente deixou de gerenciar
+ * o estado dos dados (todos, nextId). Agora ele:
+ *   1. Injeta o TodoService para delegar todas as operações CRUD.
+ *   2. Mantém apenas o estado de UI (qual dialog está aberto, qual
+ *      tarefa está selecionada, filtro ativo).
+ *   3. Exibe as notificações de toast após cada operação bem-sucedida.
  *
- * Este componente NÃO realiza nenhuma operação CRUD diretamente na view.
- * Ele é o ponto central de estado da aplicação e delega cada operação
- * para um componente filho especializado:
- *
- *   ┌─────────────────────────────────────────────────────────────────┐
- *   │  AppComponent  (estado global + handlers CRUD)                  │
- *   │                                                                  │
- *   │  ├─ TodoListComponent    → operação LISTAR                      │
- *   │  ├─ TodoFormComponent    → operações INCLUIR e ALTERAR          │
- *   │  └─ TodoDetailComponent  → operação DETALHAR                    │
- *   └─────────────────────────────────────────────────────────────────┘
- *
- * COMUNICAÇÃO (input / output / model):
- *   • Passa dados PARA os filhos via [input()]  — ex.: [todos], [filter]
- *   • Recebe eventos DOS filhos via (output())  — ex.: (save), (remove)
- *   • Controla visibilidade dos dialogs via [(model())] — two-way binding
- *     bidirecional sem necessidade de @Input/@Output separados.
+ * Fluxo de dados:
+ *   TodoService.todos (signal readonly)
+ *       ↓  [todos]="todoService.todos()"
+ *   TodoListComponent  →  emite output() de navegação
+ *       ↓  (detail / edit / remove / addNew)
+ *   AppComponent  →  abre dialogs / chama todoService.remove()
+ *       ↓  [(visible)] / [editTarget] / [mode]
+ *   TodoFormComponent  →  chama todoService.add() / todoService.update()
+ *                          emite output() save para notificação de toast
+ *       ↓  (save)
+ *   AppComponent  →  exibe toast (dados já persistidos pelo service)
  */
 
 import { Component, signal, inject } from '@angular/core';
@@ -28,6 +26,7 @@ import { ToastModule } from 'primeng/toast';
 import { ConfirmDialogModule } from 'primeng/confirmdialog';
 import { ConfirmationService, MessageService } from 'primeng/api';
 import { Todo, FilterType, TodoFormData } from './models';
+import { TodoService } from './services/todo.service';
 import { TodoListComponent } from './todo-list/todo-list.component';
 import { TodoDetailComponent } from './todo-detail/todo-detail.component';
 import { TodoFormComponent } from './todo-form/todo-form.component';
@@ -48,40 +47,11 @@ import { TodoFormComponent } from './todo-form/todo-form.component';
 export class AppComponent {
   private confirmationService = inject(ConfirmationService);
   private messageService      = inject(MessageService);
-  private nextId              = 4;
 
-  // ── Estado global gerenciado com signal() ─────────────────────────────────
-  // signal() cria um valor reativo: qualquer alteração via .set() ou .update()
-  // propaga automaticamente para todos os componentes que dependem dele.
-  todos = signal<Todo[]>([
-    {
-      id: 1,
-      text: 'Estudar Angular 17 com Signals',
-      description: 'Aprender sobre signals, computed e effects para gerenciamento de estado reativo.',
-      priority: 3,
-      completed: false,
-      createdAt: new Date('2026-05-10T09:00:00'),
-    },
-    {
-      id: 2,
-      text: 'Configurar PrimeNG no projeto',
-      description: 'Instalar e configurar o tema lara-light-blue com os componentes necessários.',
-      priority: 2,
-      completed: true,
-      createdAt: new Date('2026-05-11T14:30:00'),
-    },
-    {
-      id: 3,
-      text: 'Criar layout responsivo com Tailwind',
-      description: '',
-      priority: 1,
-      completed: false,
-      createdAt: new Date('2026-05-12T08:00:00'),
-    },
-  ]);
+  // Injeta o service — fonte de verdade dos dados.
+  readonly todoService = inject(TodoService);
 
-  // Sinais de controle de UI — controlam qual dialog está visível e qual
-  // tarefa está selecionada para edição/detalhe.
+  // ── Estado de UI (coordenação de dialogs) ────────────────────────────────
   currentFilter    = signal<FilterType>('all');
   showFormDialog   = signal(false);
   showDetailDialog = signal(false);
@@ -90,16 +60,15 @@ export class AppComponent {
   selectedTodo     = signal<Todo | null>(null);
 
   // ── Coordenação dos dialogs ───────────────────────────────────────────────
-  // Esses métodos são chamados quando um componente filho emite um output().
 
-  /** Abre o TodoFormComponent no modo INCLUIR. */
+  /** Abre o TodoFormComponent no modo INSERIR. */
   openAdd() {
     this.editTarget.set(null);
     this.dialogMode.set('add');
     this.showFormDialog.set(true);
   }
 
-  /** Abre o TodoFormComponent no modo ALTERAR com os dados da tarefa. */
+  /** Abre o TodoFormComponent no modo ATUALIZAR com os dados da tarefa. */
   openEdit(todo: Todo) {
     this.editTarget.set(todo);
     this.dialogMode.set('edit');
@@ -113,30 +82,15 @@ export class AppComponent {
     this.showDetailDialog.set(true);
   }
 
-  // ── Handlers CRUD ─────────────────────────────────────────────────────────
-  // Cada método abaixo é conectado a um output() de um componente filho
-  // no template (app.component.html) usando a sintaxe (evento)="handler($event)".
-
-  /** Alterna o campo `completed` da tarefa — chamado pelo output toggle do TodoListComponent. */
-  handleToggle(id: number) {
-    this.todos.update(todos =>
-      todos.map(t => t.id === id ? { ...t, completed: !t.completed } : t)
-    );
-  }
+  // ── Handlers de eventos dos filhos ────────────────────────────────────────
 
   /**
-   * Persiste a tarefa — chamado pelo output save do TodoFormComponent.
-   * Se mode === 'add': cria um novo Todo com id e createdAt gerados aqui.
-   * Se mode === 'edit': mescla os dados no item existente via spread operator.
+   * Chamado pelo output() save do TodoFormComponent.
+   * O service já foi atualizado dentro do próprio TodoFormComponent;
+   * este handler apenas exibe o toast de notificação.
    */
   handleSave(data: TodoFormData) {
     if (this.dialogMode() === 'add') {
-      const newTodo: Todo = {
-        id: this.nextId++,
-        ...data,
-        createdAt: new Date(),
-      };
-      this.todos.update(todos => [newTodo, ...todos]);
       this.messageService.add({
         severity: 'success',
         summary: 'Tarefa adicionada',
@@ -144,11 +98,6 @@ export class AppComponent {
         life: 3000,
       });
     } else {
-      const target = this.editTarget();
-      if (!target) return;
-      this.todos.update(todos =>
-        todos.map(t => t.id === target.id ? { ...t, ...data } : t)
-      );
       this.messageService.add({
         severity: 'info',
         summary: 'Tarefa atualizada',
@@ -158,7 +107,10 @@ export class AppComponent {
     }
   }
 
-  /** Remove a tarefa após confirmação — chamado pelo output remove do TodoListComponent. */
+  /**
+   * Chamado pelo output() remove do TodoListComponent.
+   * Exibe confirmação e delega a remoção ao TodoService.remove().
+   */
   handleDelete(todo: Todo) {
     this.confirmationService.confirm({
       message: `Deseja excluir a tarefa "${todo.text}"?`,
@@ -168,7 +120,7 @@ export class AppComponent {
       rejectLabel: 'Cancelar',
       acceptButtonStyleClass: 'p-button-danger',
       accept: () => {
-        this.todos.update(todos => todos.filter(t => t.id !== todo.id));
+        this.todoService.remove(todo.id);   // ← delega ao service
         this.messageService.add({
           severity: 'warn',
           summary: 'Tarefa removida',

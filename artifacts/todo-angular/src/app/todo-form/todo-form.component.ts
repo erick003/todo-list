@@ -1,32 +1,23 @@
 /**
- * TodoFormComponent — operações INCLUIR e ALTERAR
+ * TodoFormComponent — operações INSERIR e ATUALIZAR
  *
- * Requisito atendido: componente único que centraliza os dois casos de
- * escrita (criação e edição), diferenciados pelo input `mode`.
+ * Uso do service: injeta TodoService e persiste os dados diretamente
+ * em onSave(), antes de emitir o output() save.
+ *   • modo 'add'  → todoService.add(data)
+ *   • modo 'edit' → todoService.update(editTarget.id, data)
  *
- * COMUNICAÇÃO COM O PAI (AppComponent):
+ * O output() save continua existindo, mas agora serve apenas para
+ * notificar o AppComponent que uma operação ocorreu (para exibir o toast).
+ * A persistência em si já foi feita aqui, no componente de formulário.
  *
- *   model()  — binding BIDIRECIONAL para visibilidade do dialog:
- *     • visible : boolean
- *       - O pai abre (true) e o componente fecha (false) ao salvar/cancelar.
- *       - No template do pai: [(visible)]="showFormDialog"
- *
- *   input()  — dados somente-leitura recebidos do pai:
- *     • mode       : 'add' | 'edit'  — determina o título e o comportamento
- *     • editTarget : Todo | null     — tarefa a editar (null = nova tarefa)
- *
- *   output() — evento emitido ao confirmar o formulário:
- *     • save : TodoFormData — pai persiste os dados e atualiza o signal todos
- *
- * SIGNAL FORMS (formulário reativo com signals puros):
- *   Em vez de ReactiveFormsModule (FormGroup / FormControl), cada campo
- *   do formulário é um signal() independente. A validação é feita com
- *   computed(), que recalcula os erros sempre que o campo muda.
- *   Isso elimina a dependência do módulo de formulários para lógica
- *   de validação e mantém tudo tipado e reativo.
+ * COMUNICAÇÃO COM O AppComponent:
+ *   model()  ↔ visible    — two-way binding para abrir/fechar o dialog
+ *   input()  ← mode       — 'add' ou 'edit'
+ *   input()  ← editTarget — tarefa a editar (null para nova tarefa)
+ *   output() → save       — notifica o pai após persistir (para toast)
  */
 
-import { Component, input, output, model, signal, computed, effect } from '@angular/core';
+import { Component, input, output, model, signal, computed, effect, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { DialogModule } from 'primeng/dialog';
@@ -36,6 +27,7 @@ import { InputTextareaModule } from 'primeng/inputtextarea';
 import { DropdownModule } from 'primeng/dropdown';
 import { CheckboxModule } from 'primeng/checkbox';
 import { Todo, TodoFormData } from '../models';
+import { TodoService } from '../services/todo.service';
 
 @Component({
   selector: 'app-todo-form',
@@ -53,37 +45,31 @@ import { Todo, TodoFormData } from '../models';
   templateUrl: './todo-form.component.html',
 })
 export class TodoFormComponent {
-  // ── model() — binding bidirecional ────────────────────────────────────────
-  // Mesmo padrão do TodoDetailComponent: pai e filho compartilham o estado
-  // de abertura/fechamento do dialog sem eventos separados.
+  // Service injetado — realiza a persistência (inserir/atualizar).
+  private todoService = inject(TodoService);
+
+  // ── model() — two-way binding de visibilidade ─────────────────────────────
   visible = model(false);
 
   // ── input() — configuração recebida do pai ────────────────────────────────
   mode       = input<'add' | 'edit'>('add');
   editTarget = input<Todo | null>(null);
 
-  // ── output() — evento de saída com os dados do formulário ─────────────────
+  // ── output() — notificação pós-persistência (apenas para toast no pai) ────
   save = output<TodoFormData>();
 
-  // ── Signal Form — campos do formulário como signals ───────────────────────
-  // Cada campo é um signal<T> inicializado com seu valor padrão.
-  // A binding no template usa [(ngModel)] para two-way com FormsModule,
-  // mas o estado "verdadeiro" é sempre o signal (não o ngModel interno).
+  // ── Signal Form — campos como signals ────────────────────────────────────
   formText        = signal('');
   formDescription = signal('');
   formPriority    = signal<number>(2);
   formCompleted   = signal(false);
 
-  // ── Signal Form — estado "touched" (campo foi interagido pelo usuário) ─────
-  // Erros só são exibidos após o usuário tocar o campo ou tentar salvar,
-  // evitando mensagens de erro prematuras ao abrir o formulário.
+  // ── Signal Form — estado touched ─────────────────────────────────────────
   textTouched        = signal(false);
   descriptionTouched = signal(false);
   priorityTouched    = signal(false);
 
-  // ── Signal Form — validação reativa com computed() ────────────────────────
-  // computed<string | null>() recalcula o erro sempre que o signal do campo
-  // muda. Retorna a mensagem de erro ou null (sem erro).
+  // ── Signal Form — validação com computed() ────────────────────────────────
   textError = computed<string | null>(() => {
     const v = this.formText().trim();
     if (!v)             return 'O título é obrigatório.';
@@ -104,7 +90,6 @@ export class TodoFormComponent {
     return null;
   });
 
-  // computed() que agrega todos os erros — usado para desabilitar o botão Salvar.
   isFormValid = computed(() =>
     this.textError()        === null &&
     this.descriptionError() === null &&
@@ -117,10 +102,7 @@ export class TodoFormComponent {
     { label: 'Alta',  value: 3 },
   ];
 
-  // ── effect() — preenche/limpa o formulário ao abrir o dialog ──────────────
-  // effect() é executado toda vez que qualquer signal lido dentro dele muda.
-  // Aqui, observa `visible`: ao abrir (true), popula com os dados de edição
-  // ou limpa para um novo cadastro. Também reseta os estados "touched".
+  // ── effect() — preenche/limpa o formulário ao abrir ───────────────────────
   constructor() {
     effect(() => {
       if (this.visible()) {
@@ -138,20 +120,28 @@ export class TodoFormComponent {
 
   // ── Ações ─────────────────────────────────────────────────────────────────
   onSave() {
-    // Marca todos os campos como tocados para exibir erros antes de enviar.
     this.textTouched.set(true);
     this.descriptionTouched.set(true);
     this.priorityTouched.set(true);
     if (!this.isFormValid()) return;
 
-    // Emite o output() save com os dados validados para o pai persistir.
-    this.save.emit({
+    const data: TodoFormData = {
       text:        this.formText().trim(),
       description: this.formDescription().trim(),
       priority:    this.formPriority(),
       completed:   this.formCompleted(),
-    });
-    this.visible.set(false);  // fecha o dialog via model()
+    };
+
+    // Persiste via service antes de notificar o pai.
+    if (this.mode() === 'add') {
+      this.todoService.add(data);                          // ← INSERIR
+    } else {
+      const id = this.editTarget()?.id;
+      if (id != null) this.todoService.update(id, data);  // ← ATUALIZAR
+    }
+
+    this.save.emit(data);    // notifica o pai apenas para exibir o toast
+    this.visible.set(false);
   }
 
   onCancel() {
