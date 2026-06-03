@@ -1,123 +1,133 @@
-<p-dialog
-  [header]="mode() === 'add' ? 'Nova Tarefa' : 'Editar Tarefa'"
-  [visible]="visible()"
-  (visibleChange)="visible.set($event)"
-  [modal]="true"
-  [draggable]="false"
-  [resizable]="false"
-  [style]="{width: '520px'}">
+<div class="min-h-screen bg-gradient-to-br from-slate-100 to-blue-50 p-6">
+  <div class="max-w-2xl mx-auto">
 
-  <div class="flex flex-col gap-5 pt-4">
-
-    <!-- ── Título ──────────────────────────────────────────────────────── -->
-    <div class="flex flex-col gap-1">
-      <label class="text-sm font-semibold text-gray-700">
-        Título <span class="text-red-500">*</span>
-      </label>
-      <input
-        pInputText
-        [ngModel]="formText()"
-        (ngModelChange)="formText.set($event)"
-        (blur)="textTouched.set(true)"
-        placeholder="Digite o título da tarefa..."
-        class="w-full"
-        [class.p-invalid]="textTouched() && textError() !== null" />
-
-      @if (textTouched() && textError()) {
-        <small class="text-red-500 text-xs flex items-center gap-1 mt-0.5">
-          <i class="pi pi-exclamation-circle"></i> {{ textError() }}
-        </small>
-      } @else {
-        <small class="text-gray-400 text-xs mt-0.5">{{ formText().length }}/100 caracteres</small>
-      }
-    </div>
-
-    <!-- ── Descrição ───────────────────────────────────────────────────── -->
-    <div class="flex flex-col gap-1">
-      <label class="text-sm font-semibold text-gray-700">Descrição</label>
-      <textarea
-        pInputTextarea
-        [ngModel]="formDescription()"
-        (ngModelChange)="formDescription.set($event)"
-        (blur)="descriptionTouched.set(true)"
-        placeholder="Adicione uma descrição opcional..."
-        rows="3"
-        class="w-full resize-none"
-        [class.p-invalid]="descriptionTouched() && descriptionError() !== null">
-      </textarea>
-
-      @if (descriptionTouched() && descriptionError()) {
-        <small class="text-red-500 text-xs flex items-center gap-1 mt-0.5">
-          <i class="pi pi-exclamation-circle"></i> {{ descriptionError() }}
-        </small>
-      } @else {
-        <small
-          class="text-xs mt-0.5"
-          [class.text-red-400]="formDescription().length > 450"
-          [class.text-gray-400]="formDescription().length <= 450">
-          {{ formDescription().length }}/500 caracteres
-        </small>
-      }
-    </div>
-
-    <!-- ── Prioridade ──────────────────────────────────────────────────── -->
-    <div class="flex flex-col gap-1">
-      <label class="text-sm font-semibold text-gray-700">
-        Prioridade <span class="text-red-500">*</span>
-      </label>
-      <p-dropdown
-        [options]="priorityOptions"
-        [ngModel]="formPriority()"
-        (ngModelChange)="formPriority.set($event); priorityTouched.set(true)"
-        (onHide)="priorityTouched.set(true)"
-        optionLabel="label"
-        optionValue="value"
-        placeholder="Selecione a prioridade..."
-        styleClass="w-full"
-        [class.p-invalid]="priorityTouched() && priorityError() !== null">
-      </p-dropdown>
-
-      @if (priorityTouched() && priorityError()) {
-        <small class="text-red-500 text-xs flex items-center gap-1 mt-0.5">
-          <i class="pi pi-exclamation-circle"></i> {{ priorityError() }}
-        </small>
-      }
-    </div>
-
-    <!-- ── Concluída ───────────────────────────────────────────────────── -->
-    <div class="flex items-center gap-3">
-      <p-checkbox
-        [ngModel]="formCompleted()"
-        (ngModelChange)="formCompleted.set($event)"
-        [binary]="true"
-        inputId="formCompleted">
-      </p-checkbox>
-      <label for="formCompleted" class="text-sm text-gray-700 cursor-pointer select-none">
-        Marcar como concluída
-      </label>
-    </div>
-
-    <!-- ── Banner de formulário inválido ──────────────────────────────── -->
-    @if (!isFormValid()) {
-      <div class="bg-red-50 border border-red-100 rounded-xl p-3 flex items-start gap-2">
-        <i class="pi pi-info-circle text-red-400 mt-0.5 text-sm"></i>
-        <p class="text-red-600 text-xs leading-relaxed">
-          Preencha os campos obrigatórios corretamente antes de salvar.
+    <!-- Cabeçalho com navegação -->
+    <div class="flex items-center gap-3 mb-8">
+      <p-button icon="pi pi-arrow-left" [text]="true" [rounded]="true"
+        pTooltip="Voltar" tooltipPosition="right"
+        (onClick)="onCancel()">
+      </p-button>
+      <div>
+        <h1 class="text-2xl font-bold text-gray-900 tracking-tight">
+          {{ mode() === 'add' ? 'Nova Tarefa' : 'Editar Tarefa' }}
+        </h1>
+        <p class="text-gray-400 text-sm mt-0.5">
+          Rota: {{ mode() === 'add' ? '/todos/new' : '/todos/' + editTarget()?.id + '/edit' }}
         </p>
       </div>
-    }
+    </div>
+
+    <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-8">
+      <div class="flex flex-col gap-5">
+
+        <!-- ── Título ──────────────────────────────────────────────────────── -->
+        <div class="flex flex-col gap-1">
+          <label class="text-sm font-semibold text-gray-700">
+            Título <span class="text-red-500">*</span>
+          </label>
+          <input
+            pInputText
+            [ngModel]="formText()"
+            (ngModelChange)="formText.set($event)"
+            (blur)="textTouched.set(true)"
+            placeholder="Digite o título da tarefa..."
+            class="w-full"
+            [class.p-invalid]="textTouched() && textError() !== null" />
+          @if (textTouched() && textError()) {
+            <small class="text-red-500 text-xs flex items-center gap-1 mt-0.5">
+              <i class="pi pi-exclamation-circle"></i> {{ textError() }}
+            </small>
+          } @else {
+            <small class="text-gray-400 text-xs mt-0.5">{{ formText().length }}/100 caracteres</small>
+          }
+        </div>
+
+        <!-- ── Descrição ───────────────────────────────────────────────────── -->
+        <div class="flex flex-col gap-1">
+          <label class="text-sm font-semibold text-gray-700">Descrição</label>
+          <textarea
+            pInputTextarea
+            [ngModel]="formDescription()"
+            (ngModelChange)="formDescription.set($event)"
+            (blur)="descriptionTouched.set(true)"
+            placeholder="Adicione uma descrição opcional..."
+            rows="3"
+            class="w-full resize-none"
+            [class.p-invalid]="descriptionTouched() && descriptionError() !== null">
+          </textarea>
+          @if (descriptionTouched() && descriptionError()) {
+            <small class="text-red-500 text-xs flex items-center gap-1 mt-0.5">
+              <i class="pi pi-exclamation-circle"></i> {{ descriptionError() }}
+            </small>
+          } @else {
+            <small
+              class="text-xs mt-0.5"
+              [class.text-red-400]="formDescription().length > 450"
+              [class.text-gray-400]="formDescription().length <= 450">
+              {{ formDescription().length }}/500 caracteres
+            </small>
+          }
+        </div>
+
+        <!-- ── Prioridade ──────────────────────────────────────────────────── -->
+        <div class="flex flex-col gap-1">
+          <label class="text-sm font-semibold text-gray-700">
+            Prioridade <span class="text-red-500">*</span>
+          </label>
+          <p-dropdown
+            [options]="priorityOptions"
+            [ngModel]="formPriority()"
+            (ngModelChange)="formPriority.set($event); priorityTouched.set(true)"
+            (onHide)="priorityTouched.set(true)"
+            optionLabel="label"
+            optionValue="value"
+            placeholder="Selecione a prioridade..."
+            styleClass="w-full"
+            [class.p-invalid]="priorityTouched() && priorityError() !== null">
+          </p-dropdown>
+          @if (priorityTouched() && priorityError()) {
+            <small class="text-red-500 text-xs flex items-center gap-1 mt-0.5">
+              <i class="pi pi-exclamation-circle"></i> {{ priorityError() }}
+            </small>
+          }
+        </div>
+
+        <!-- ── Concluída ───────────────────────────────────────────────────── -->
+        <div class="flex items-center gap-3">
+          <p-checkbox
+            [ngModel]="formCompleted()"
+            (ngModelChange)="formCompleted.set($event)"
+            [binary]="true"
+            inputId="formCompleted">
+          </p-checkbox>
+          <label for="formCompleted" class="text-sm text-gray-700 cursor-pointer select-none">
+            Marcar como concluída
+          </label>
+        </div>
+
+        <!-- ── Banner de formulário inválido ──────────────────────────────── -->
+        @if (!isFormValid() && (textTouched() || descriptionTouched() || priorityTouched())) {
+          <div class="bg-red-50 border border-red-100 rounded-xl p-3 flex items-start gap-2">
+            <i class="pi pi-info-circle text-red-400 mt-0.5 text-sm"></i>
+            <p class="text-red-600 text-xs leading-relaxed">
+              Preencha os campos obrigatórios corretamente antes de salvar.
+            </p>
+          </div>
+        }
+
+        <!-- ── Ações ───────────────────────────────────────────────────────── -->
+        <div class="flex justify-end gap-2 pt-2">
+          <p-button label="Cancelar" [text]="true" (onClick)="onCancel()"></p-button>
+          <p-button
+            [label]="mode() === 'add' ? 'Incluir' : 'Alterar'"
+            icon="pi pi-check"
+            [disabled]="!isFormValid()"
+            (onClick)="onSave()">
+          </p-button>
+        </div>
+
+      </div>
+    </div>
 
   </div>
-
-  <ng-template pTemplate="footer">
-    <div class="flex justify-end gap-2 pt-2">
-      <p-button label="Cancelar" [text]="true" (onClick)="onCancel()"></p-button>
-      <p-button
-        [label]="mode() === 'add' ? 'Incluir' : 'Alterar'"
-        icon="pi pi-check"
-        [disabled]="!isFormValid()"
-        (onClick)="onSave()">
-      </p-button>
-    </div>
-  </ng-template>
-</p-dialog>
+</div>

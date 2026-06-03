@@ -1,29 +1,29 @@
 /**
- * TodoListComponent — operação LISTAR
+ * TodoListComponent — operação LISTAR (rota: /todos)
  *
- * Uso do service: injeta TodoService para chamar toggle() diretamente,
- * sem precisar emitir um output() para o pai apenas para inverter um campo.
- * Isso demonstra que componentes podem operar o service de forma autônoma
- * para ações simples, enquanto ações que exigem coordenação de UI (abrir
- * dialogs, confirmação) ainda são delegadas ao pai via output().
+ * Requisito: "O componente de LISTAGEM envie informação na ativação das
+ * rotas de DETALHE E ATUALIZAÇÃO."
  *
- * COMUNICAÇÃO COM O AppComponent:
- *   input()  ← todos  : Todo[]      — lista atual (lida do service pelo pai)
- *   input()  ← filter : FilterType  — filtro de exibição
- *   output() → filterChange          — usuário troca o filtro
- *   output() → addNew                — usuário quer incluir nova tarefa
- *   output() → detail                — usuário quer detalhar uma tarefa
- *   output() → edit                  — usuário quer alterar uma tarefa
- *   output() → remove                — usuário quer remover (pai confirma)
+ * Ao navegar para detalhe ou edição, o objeto Todo completo é passado via
+ * Navigation State (History API):
+ *   router.navigate(['/todos', todo.id],          { state: { todo } }) → detalhe
+ *   router.navigate(['/todos', todo.id, 'edit'],  { state: { todo } }) → edição
  *
- *   toggle (sem output) — chamado diretamente via todoService.toggle(id)
+ * O componente de destino lê history.state.todo e usa esse valor diretamente,
+ * sem precisar buscar no service novamente (evita round-trip). Se o usuário
+ * acessar a URL diretamente (sem passar pela lista), o fallback usa getById().
+ *
+ * Com rotas, este componente deixou de usar input() e output() para dados —
+ * agora gerencia seu próprio estado (filter) e navega diretamente via Router.
  */
 
-import { Component, input, output, computed, inject } from '@angular/core';
+import { Component, signal, computed, inject } from '@angular/core';
 import { CommonModule, DatePipe } from '@angular/common';
+import { Router } from '@angular/router';
 import { ButtonModule } from 'primeng/button';
 import { TagModule } from 'primeng/tag';
 import { TooltipModule } from 'primeng/tooltip';
+import { ConfirmationService, MessageService } from 'primeng/api';
 import { Todo, FilterType } from '../models';
 import { TodoService } from '../services/todo.service';
 
@@ -34,43 +34,77 @@ import { TodoService } from '../services/todo.service';
   templateUrl: './todo-list.component.html',
 })
 export class TodoListComponent {
-  // Service injetado — usado para chamar toggle() diretamente.
-  private todoService = inject(TodoService);
+  private todoService         = inject(TodoService);
+  private router              = inject(Router);
+  private confirmationService = inject(ConfirmationService);
+  private messageService      = inject(MessageService);
 
-  // ── input() — dados recebidos do pai ──────────────────────────────────────
-  todos  = input.required<Todo[]>();
-  filter = input.required<FilterType>();
+  // Filtro gerenciado localmente (não vem mais via input do pai).
+  filter = signal<FilterType>('all');
 
-  // ── output() — eventos emitidos para o pai ────────────────────────────────
-  filterChange = output<FilterType>();
-  addNew       = output<void>();
-  detail       = output<Todo>();
-  edit         = output<Todo>();
-  remove       = output<Todo>();
-  // Nota: toggle NÃO é mais um output() — é chamado diretamente no service.
-
-  // ── computed() — derivados dos inputs ────────────────────────────────────
-  totalCount     = computed(() => this.todos().length);
-  activeCount    = computed(() => this.todos().filter(t => !t.completed).length);
-  completedCount = computed(() => this.todos().filter(t => t.completed).length);
+  // Computed a partir do signal do service — reage automaticamente a qualquer CRUD.
+  totalCount     = computed(() => this.todoService.todos().length);
+  activeCount    = computed(() => this.todoService.todos().filter(t => !t.completed).length);
+  completedCount = computed(() => this.todoService.todos().filter(t => t.completed).length);
 
   filteredTodos = computed(() => {
     const f = this.filter();
-    return this.todos().filter(t => {
+    return this.todoService.todos().filter(t => {
       if (f === 'active')    return !t.completed;
       if (f === 'completed') return t.completed;
       return true;
     });
   });
 
-  // ── Ação direta no service (operação ALTERNAR STATUS) ─────────────────────
+  // ── Navegação — envia o todo via state ────────────────────────────────────
+
+  /** Ativa a rota INCLUIR (/todos/new). */
+  goToAdd(): void {
+    this.router.navigate(['/todos', 'new']);
+  }
+
   /**
-   * Chama todoService.toggle() diretamente, sem intermediação do pai.
-   * O signal todos (recebido via input) será atualizado automaticamente
-   * porque o pai o lê de todoService.todos().
+   * Ativa a rota DETALHAR (/todos/:id) e passa o objeto todo via state.
+   * Requisito: "LISTAGEM envie informação na ativação da rota de DETALHE."
    */
+  goToDetail(todo: Todo): void {
+    this.router.navigate(['/todos', todo.id], { state: { todo } });
+  }
+
+  /**
+   * Ativa a rota ATUALIZAR (/todos/:id/edit) e passa o objeto todo via state.
+   * Requisito: "LISTAGEM envie informação na ativação da rota de ATUALIZAÇÃO."
+   */
+  goToEdit(todo: Todo): void {
+    this.router.navigate(['/todos', todo.id, 'edit'], { state: { todo } });
+  }
+
+  // ── Operações diretas no service ──────────────────────────────────────────
+
+  /** Alterna completed diretamente via service — sem navegação. */
   onToggle(id: number): void {
     this.todoService.toggle(id);
+  }
+
+  /** Exibe confirmação e delega remoção ao service. */
+  onDelete(todo: Todo): void {
+    this.confirmationService.confirm({
+      message: `Deseja excluir a tarefa "${todo.text}"?`,
+      header: 'Confirmar Exclusão',
+      icon: 'pi pi-exclamation-triangle',
+      acceptLabel: 'Excluir',
+      rejectLabel: 'Cancelar',
+      acceptButtonStyleClass: 'p-button-danger',
+      accept: () => {
+        this.todoService.remove(todo.id);
+        this.messageService.add({
+          severity: 'warn',
+          summary: 'Tarefa removida',
+          detail: `"${todo.text}" foi excluída.`,
+          life: 3000,
+        });
+      },
+    });
   }
 
   // ── Helpers de exibição ───────────────────────────────────────────────────
@@ -80,9 +114,7 @@ export class TodoListComponent {
 
   getPrioritySeverity(priority: number): 'success' | 'warning' | 'danger' {
     const map: Record<number, 'success' | 'warning' | 'danger'> = {
-      1: 'success',
-      2: 'warning',
-      3: 'danger',
+      1: 'success', 2: 'warning', 3: 'danger',
     };
     return map[priority] ?? 'success';
   }

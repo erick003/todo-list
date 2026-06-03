@@ -1,19 +1,23 @@
 /**
- * TodoDetailComponent — operação DETALHAR
+ * TodoDetailComponent — operação DETALHAR (rota: /todos/:id)
  *
- * Uso do service: injeta TodoService e chama getById() em onEdit() para
- * garantir que os dados enviados ao formulário são sempre a versão mais
- * recente armazenada no service — não a snapshot passada como input().
+ * Requisito: "LISTAGEM envie informação na ativação da rota de DETALHE e
+ * este componente utilize essa mesma informação na nova rota ativada."
  *
- * COMUNICAÇÃO COM O AppComponent:
- *   model()  ↔ visible      — two-way binding para abrir/fechar o dialog
- *   input()  ← todo         — tarefa selecionada para exibição
- *   output() → editRequest  — solicita ao pai que abra o formulário de edição
+ * Leitura dos dados recebidos da lista:
+ *   1. history.state.todo — objeto Todo passado pelo TodoListComponent via
+ *      router.navigate(['/todos', id], { state: { todo } }).
+ *      Disponível sem precisar buscar no service — é a informação enviada
+ *      pela lista no momento da navegação.
+ *   2. Fallback: todoService.getById(id) — usado quando o usuário acessa
+ *      a URL diretamente (sem passar pela lista).
+ *
+ * Este componente não usa mais p-dialog nem model() — é uma página completa.
  */
 
-import { Component, input, output, model, inject } from '@angular/core';
+import { Component, OnInit, signal, inject } from '@angular/core';
 import { CommonModule, DatePipe } from '@angular/common';
-import { DialogModule } from 'primeng/dialog';
+import { ActivatedRoute, Router } from '@angular/router';
 import { ButtonModule } from 'primeng/button';
 import { TagModule } from 'primeng/tag';
 import { DividerModule } from 'primeng/divider';
@@ -23,31 +27,42 @@ import { TodoService } from '../services/todo.service';
 @Component({
   selector: 'app-todo-detail',
   standalone: true,
-  imports: [CommonModule, DatePipe, DialogModule, ButtonModule, TagModule, DividerModule],
+  imports: [CommonModule, DatePipe, ButtonModule, TagModule, DividerModule],
   templateUrl: './todo-detail.component.html',
 })
-export class TodoDetailComponent {
-  // Service injetado — usado para obter a versão mais recente da tarefa em onEdit().
-  private todoService = inject(TodoService);
+export class TodoDetailComponent implements OnInit {
+  private route        = inject(ActivatedRoute);
+  private router       = inject(Router);
+  private todoService  = inject(TodoService);
 
-  // ── model() — two-way binding de visibilidade ─────────────────────────────
-  visible = model(false);
+  // Signal local que armazena o todo a ser exibido.
+  todo = signal<Todo | null>(null);
 
-  // ── input() — tarefa selecionada para exibição ────────────────────────────
-  todo = input<Todo | null>(null);
+  ngOnInit(): void {
+    const id = Number(this.route.snapshot.paramMap.get('id'));
 
-  // ── output() — solicita abertura do formulário de edição no pai ───────────
-  editRequest = output<Todo>();
+    // Requisito: usa a informação enviada pela lista via Navigation State.
+    // history.state é preenchido pelo Angular quando router.navigate é chamado
+    // com a opção { state: { todo } } no TodoListComponent.
+    const stateData = history.state as { todo?: Todo };
+    this.todo.set(stateData.todo ?? this.todoService.getById(id) ?? null);
+  }
 
-  // ── Ações ─────────────────────────────────────────────────────────────────
-  onEdit() {
+  /** Navega de volta para a listagem. */
+  goBack(): void {
+    this.router.navigate(['/todos']);
+  }
+
+  /**
+   * Navega para a rota de edição, passando o todo atual via state.
+   * Encadeia a passagem de dados: lista → detalhe → edição.
+   */
+  goToEdit(): void {
     const t = this.todo();
     if (t) {
-      // Busca a versão mais recente no service (getById) para garantir
-      // que alterações feitas após a abertura do detalhe sejam refletidas.
+      // Obtém a versão mais recente do service antes de abrir o formulário.
       const fresh = this.todoService.getById(t.id) ?? t;
-      this.editRequest.emit(fresh);
-      this.visible.set(false);
+      this.router.navigate(['/todos', fresh.id, 'edit'], { state: { todo: fresh } });
     }
   }
 
@@ -58,9 +73,7 @@ export class TodoDetailComponent {
 
   getPrioritySeverity(priority: number): 'success' | 'warning' | 'danger' {
     const map: Record<number, 'success' | 'warning' | 'danger'> = {
-      1: 'success',
-      2: 'warning',
-      3: 'danger',
+      1: 'success', 2: 'warning', 3: 'danger',
     };
     return map[priority] ?? 'success';
   }

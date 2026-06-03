@@ -1,31 +1,35 @@
 /**
- * TodoFormComponent — operações INSERIR e ATUALIZAR
+ * TodoFormComponent — operações INCLUIR e ATUALIZAR
  *
- * Uso do service: injeta TodoService e persiste os dados diretamente
- * em onSave(), antes de emitir o output() save.
- *   • modo 'add'  → todoService.add(data)
- *   • modo 'edit' → todoService.update(editTarget.id, data)
+ * Rotas:
+ *   /todos/new        → mode 'add'  (sem parâmetro :id)
+ *   /todos/:id/edit   → mode 'edit' (com parâmetro :id)
  *
- * O output() save continua existindo, mas agora serve apenas para
- * notificar o AppComponent que uma operação ocorreu (para exibir o toast).
- * A persistência em si já foi feita aqui, no componente de formulário.
+ * Requisito: "LISTAGEM envie informação na ativação da rota de ATUALIZAÇÃO
+ * e este componente utilize essa mesma informação na nova rota ativada."
  *
- * COMUNICAÇÃO COM O AppComponent:
- *   model()  ↔ visible    — two-way binding para abrir/fechar o dialog
- *   input()  ← mode       — 'add' ou 'edit'
- *   input()  ← editTarget — tarefa a editar (null para nova tarefa)
- *   output() → save       — notifica o pai após persistir (para toast)
+ * Leitura dos dados recebidos da lista (modo edição):
+ *   1. history.state.todo — objeto Todo passado pelo TodoListComponent (ou
+ *      TodoDetailComponent) via router.navigate([...], { state: { todo } }).
+ *   2. Fallback: todoService.getById(id) — para acesso direto pela URL.
+ *
+ * O modo (add/edit) é determinado pela presença do parâmetro :id na rota,
+ * eliminando a necessidade de input() para receber o modo do pai.
+ *
+ * Este componente não usa mais p-dialog nem model() — é uma página completa.
+ * O formulário é populado em ngOnInit() em vez de effect().
  */
 
-import { Component, input, output, model, signal, computed, effect, inject } from '@angular/core';
+import { Component, OnInit, signal, computed, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { DialogModule } from 'primeng/dialog';
+import { ActivatedRoute, Router } from '@angular/router';
 import { ButtonModule } from 'primeng/button';
 import { InputTextModule } from 'primeng/inputtext';
 import { InputTextareaModule } from 'primeng/inputtextarea';
 import { DropdownModule } from 'primeng/dropdown';
 import { CheckboxModule } from 'primeng/checkbox';
+import { MessageService } from 'primeng/api';
 import { Todo, TodoFormData } from '../models';
 import { TodoService } from '../services/todo.service';
 
@@ -35,7 +39,6 @@ import { TodoService } from '../services/todo.service';
   imports: [
     CommonModule,
     FormsModule,
-    DialogModule,
     ButtonModule,
     InputTextModule,
     InputTextareaModule,
@@ -44,32 +47,28 @@ import { TodoService } from '../services/todo.service';
   ],
   templateUrl: './todo-form.component.html',
 })
-export class TodoFormComponent {
-  // Service injetado — realiza a persistência (inserir/atualizar).
-  private todoService = inject(TodoService);
+export class TodoFormComponent implements OnInit {
+  private route          = inject(ActivatedRoute);
+  private router         = inject(Router);
+  private todoService    = inject(TodoService);
+  private messageService = inject(MessageService);
 
-  // ── model() — two-way binding de visibilidade ─────────────────────────────
-  visible = model(false);
+  // Modo determinado pela rota em ngOnInit (não vem mais de input()).
+  mode       = signal<'add' | 'edit'>('add');
+  editTarget = signal<Todo | null>(null);
 
-  // ── input() — configuração recebida do pai ────────────────────────────────
-  mode       = input<'add' | 'edit'>('add');
-  editTarget = input<Todo | null>(null);
-
-  // ── output() — notificação pós-persistência (apenas para toast no pai) ────
-  save = output<TodoFormData>();
-
-  // ── Signal Form — campos como signals ────────────────────────────────────
+  // ── Signal Form — campos ──────────────────────────────────────────────────
   formText        = signal('');
   formDescription = signal('');
   formPriority    = signal<number>(2);
   formCompleted   = signal(false);
 
-  // ── Signal Form — estado touched ─────────────────────────────────────────
+  // ── Signal Form — touched ─────────────────────────────────────────────────
   textTouched        = signal(false);
   descriptionTouched = signal(false);
   priorityTouched    = signal(false);
 
-  // ── Signal Form — validação com computed() ────────────────────────────────
+  // ── Signal Form — validação ───────────────────────────────────────────────
   textError = computed<string | null>(() => {
     const v = this.formText().trim();
     if (!v)             return 'O título é obrigatório.';
@@ -85,15 +84,14 @@ export class TodoFormComponent {
   });
 
   priorityError = computed<string | null>(() => {
-    const v = this.formPriority();
-    if (!v) return 'Selecione uma prioridade.';
+    if (!this.formPriority()) return 'Selecione uma prioridade.';
     return null;
   });
 
   isFormValid = computed(() =>
-    this.textError()        === null &&
+    this.textError() === null &&
     this.descriptionError() === null &&
-    this.priorityError()    === null
+    this.priorityError() === null
   );
 
   priorityOptions = [
@@ -102,24 +100,34 @@ export class TodoFormComponent {
     { label: 'Alta',  value: 3 },
   ];
 
-  // ── effect() — preenche/limpa o formulário ao abrir ───────────────────────
-  constructor() {
-    effect(() => {
-      if (this.visible()) {
-        const target = this.editTarget();
-        this.formText.set(target?.text        ?? '');
-        this.formDescription.set(target?.description ?? '');
-        this.formPriority.set(target?.priority    ?? 2);
-        this.formCompleted.set(target?.completed   ?? false);
-        this.textTouched.set(false);
-        this.descriptionTouched.set(false);
-        this.priorityTouched.set(false);
+  // ── Inicialização via rota ────────────────────────────────────────────────
+  ngOnInit(): void {
+    const id = this.route.snapshot.paramMap.get('id');
+
+    if (id) {
+      // Modo ATUALIZAR: URL possui :id → /todos/:id/edit
+      this.mode.set('edit');
+
+      // Requisito: lê o todo enviado pela lista via Navigation State.
+      // history.state é preenchido pelo router.navigate(..., { state: { todo } })
+      // chamado em TodoListComponent.goToEdit() ou TodoDetailComponent.goToEdit().
+      const stateData = history.state as { todo?: Todo };
+      const target = stateData.todo ?? this.todoService.getById(Number(id)) ?? null;
+      this.editTarget.set(target);
+
+      // Preenche o formulário com os dados recebidos.
+      if (target) {
+        this.formText.set(target.text);
+        this.formDescription.set(target.description);
+        this.formPriority.set(target.priority);
+        this.formCompleted.set(target.completed);
       }
-    }, { allowSignalWrites: true });
+    }
+    // Modo INCLUIR: URL é /todos/new → campos permanecem com valores padrão.
   }
 
   // ── Ações ─────────────────────────────────────────────────────────────────
-  onSave() {
+  onSave(): void {
     this.textTouched.set(true);
     this.descriptionTouched.set(true);
     this.priorityTouched.set(true);
@@ -132,19 +140,25 @@ export class TodoFormComponent {
       completed:   this.formCompleted(),
     };
 
-    // Persiste via service antes de notificar o pai.
     if (this.mode() === 'add') {
-      this.todoService.add(data);                          // ← INSERIR
+      this.todoService.add(data);                                         // INSERIR
+      this.messageService.add({
+        severity: 'success', summary: 'Tarefa adicionada',
+        detail: `"${data.text}" foi criada com sucesso.`, life: 3000,
+      });
     } else {
       const id = this.editTarget()?.id;
-      if (id != null) this.todoService.update(id, data);  // ← ATUALIZAR
+      if (id != null) this.todoService.update(id, data);                 // ATUALIZAR
+      this.messageService.add({
+        severity: 'info', summary: 'Tarefa atualizada',
+        detail: `"${data.text}" foi atualizada.`, life: 3000,
+      });
     }
 
-    this.save.emit(data);    // notifica o pai apenas para exibir o toast
-    this.visible.set(false);
+    this.router.navigate(['/todos']);  // retorna à lista após salvar
   }
 
-  onCancel() {
-    this.visible.set(false);
+  onCancel(): void {
+    this.router.navigate(['/todos']);
   }
 }

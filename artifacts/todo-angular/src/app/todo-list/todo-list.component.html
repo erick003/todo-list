@@ -7,7 +7,8 @@
         <h1 class="text-3xl font-bold text-gray-900 tracking-tight">To Do List</h1>
         <p class="text-gray-500 text-sm mt-1">Gerencie suas tarefas com eficiência</p>
       </div>
-      <p-button label="Nova Tarefa" icon="pi pi-plus" (onClick)="addNew.emit()"></p-button>
+      <!-- goToAdd() → navega para /todos/new -->
+      <p-button label="Nova Tarefa" icon="pi pi-plus" (onClick)="goToAdd()"></p-button>
     </header>
 
     <!-- Stats -->
@@ -28,24 +29,9 @@
 
     <!-- Filters -->
     <div class="flex items-center gap-2 mb-5">
-      <p-button
-        label="Todas"
-        size="small"
-        [outlined]="filter() !== 'all'"
-        (onClick)="filterChange.emit('all')">
-      </p-button>
-      <p-button
-        label="Pendentes"
-        size="small"
-        [outlined]="filter() !== 'active'"
-        (onClick)="filterChange.emit('active')">
-      </p-button>
-      <p-button
-        label="Concluídas"
-        size="small"
-        [outlined]="filter() !== 'completed'"
-        (onClick)="filterChange.emit('completed')">
-      </p-button>
+      <p-button label="Todas"     size="small" [outlined]="filter() !== 'all'"       (onClick)="filter.set('all')"></p-button>
+      <p-button label="Pendentes" size="small" [outlined]="filter() !== 'active'"    (onClick)="filter.set('active')"></p-button>
+      <p-button label="Concluídas" size="small" [outlined]="filter() !== 'completed'" (onClick)="filter.set('completed')"></p-button>
     </div>
 
     <!-- Empty state -->
@@ -67,15 +53,13 @@
 
           <div class="flex items-start gap-4">
 
-            <!-- Toggle concluída -->
+            <!-- Toggle concluída — chama service diretamente -->
             <div class="pt-0.5 flex-shrink-0">
               <p-button
                 [icon]="todo.completed ? 'pi pi-check-circle' : 'pi pi-circle'"
-                [text]="true"
-                [rounded]="true"
+                [text]="true" [rounded]="true"
                 [severity]="todo.completed ? 'success' : 'secondary'"
-                pTooltip="Marcar / desmarcar"
-                tooltipPosition="top"
+                pTooltip="Marcar / desmarcar" tooltipPosition="top"
                 (onClick)="onToggle(todo.id)">
               </p-button>
             </div>
@@ -89,44 +73,30 @@
                   [class.text-gray-400]="todo.completed">
                   {{ todo.text }}
                 </span>
-                <p-tag
-                  [value]="getPriorityLabel(todo.priority)"
-                  [severity]="getPrioritySeverity(todo.priority)">
-                </p-tag>
-                <p-tag
-                  [value]="todo.completed ? 'Concluída' : 'Pendente'"
-                  [severity]="todo.completed ? 'success' : 'warning'">
-                </p-tag>
+                <p-tag [value]="getPriorityLabel(todo.priority)"    [severity]="getPrioritySeverity(todo.priority)"></p-tag>
+                <p-tag [value]="todo.completed ? 'Concluída' : 'Pendente'" [severity]="todo.completed ? 'success' : 'warning'"></p-tag>
               </div>
-
               @if (todo.description) {
                 <p class="text-sm text-gray-400 mt-1.5 line-clamp-1">{{ todo.description }}</p>
               }
-
               <p class="text-xs text-gray-300 mt-2 font-mono">
                 #{{ todo.id }} · {{ todo.createdAt | date:'dd/MM/yyyy HH:mm' }}
               </p>
             </div>
 
-            <!-- Ações -->
+            <!-- Ações — navegam para rotas distintas passando o todo via state -->
             <div class="flex items-center gap-0.5 flex-shrink-0">
-              <p-button
-                icon="pi pi-eye"
-                [text]="true" [rounded]="true" severity="info"
+              <p-button icon="pi pi-eye"    [text]="true" [rounded]="true" severity="info"
                 pTooltip="Detalhar" tooltipPosition="top"
-                (onClick)="detail.emit(todo)">
+                (onClick)="goToDetail(todo)">
               </p-button>
-              <p-button
-                icon="pi pi-pencil"
-                [text]="true" [rounded]="true"
+              <p-button icon="pi pi-pencil" [text]="true" [rounded]="true"
                 pTooltip="Editar" tooltipPosition="top"
-                (onClick)="edit.emit(todo)">
+                (onClick)="goToEdit(todo)">
               </p-button>
-              <p-button
-                icon="pi pi-trash"
-                [text]="true" [rounded]="true" severity="danger"
+              <p-button icon="pi pi-trash"  [text]="true" [rounded]="true" severity="danger"
                 pTooltip="Excluir" tooltipPosition="top"
-                (onClick)="remove.emit(todo)">
+                (onClick)="onDelete(todo)">
               </p-button>
             </div>
 
