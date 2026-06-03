@@ -1,30 +1,4 @@
 <p-toast position="top-right"></p-toast>
 <p-confirmDialog></p-confirmDialog>
-
-<!-- Lista principal — recebe todos e filtro; emite eventos de CRUD -->
-<app-todo-list
-  [todos]="todoService.todos()"
-  [filter]="currentFilter()"
-  (filterChange)="currentFilter.set($event)"
-  (addNew)="openAdd()"
-  (detail)="openDetail($event)"
-  (edit)="openEdit($event)"
-  (remove)="handleDelete($event)">
-</app-todo-list>
-
-<!-- Dialog de detalhes — model() para visibilidade bidirecional -->
-<app-todo-detail
-  [visible]="showDetailDialog()"
-  (visibleChange)="showDetailDialog.set($event)"
-  [todo]="selectedTodo()"
-  (editRequest)="openEdit($event)">
-</app-todo-detail>
-
-<!-- Dialog de inclusão/alteração — model() para visibilidade; output para salvar -->
-<app-todo-form
-  [visible]="showFormDialog()"
-  (visibleChange)="showFormDialog.set($event)"
-  [mode]="dialogMode()"
-  [editTarget]="editTarget()"
-  (save)="handleSave($event)">
-</app-todo-form>
+<!-- Ponto de montagem das rotas: /todos, /todos/new, /todos/:id, /todos/:id/edit -->
+<router-outlet></router-outlet>
