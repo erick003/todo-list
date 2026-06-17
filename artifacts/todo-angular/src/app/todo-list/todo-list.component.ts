@@ -1,28 +1,25 @@
 /**
  * TodoListComponent — operação LISTAR (rota: /todos)
  *
- * Requisito: "O componente de LISTAGEM envie informação na ativação das
- * rotas de DETALHE E ATUALIZAÇÃO."
+ * Mudanças com a introdução do backend REST:
+ *   • ngOnInit() chama todoService.loadAll() para buscar via GET /api/todos.
+ *   • onToggle() assina todoService.toggle() — PUT /api/todos/:id.
+ *   • onDelete() assina todoService.remove() — DELETE /api/todos/:id.
+ *   • O signal todoService.todos() continua sendo a fonte reativa da UI;
+ *     é atualizado automaticamente após cada resposta HTTP via tap().
  *
- * Ao navegar para detalhe ou edição, o objeto Todo completo é passado via
- * Navigation State (History API):
- *   router.navigate(['/todos', todo.id],          { state: { todo } }) → detalhe
- *   router.navigate(['/todos', todo.id, 'edit'],  { state: { todo } }) → edição
- *
- * O componente de destino lê history.state.todo e usa esse valor diretamente,
- * sem precisar buscar no service novamente (evita round-trip). Se o usuário
- * acessar a URL diretamente (sem passar pela lista), o fallback usa getById().
- *
- * Com rotas, este componente deixou de usar input() e output() para dados —
- * agora gerencia seu próprio estado (filter) e navega diretamente via Router.
+ * Passagem de dados para rotas filhas (mantida do requisito anterior):
+ *   goToDetail(todo) → router.navigate(['/todos', id], { state: { todo } })
+ *   goToEdit(todo)   → router.navigate(['/todos', id, 'edit'], { state: { todo } })
  */
 
-import { Component, signal, computed, inject } from '@angular/core';
+import { Component, OnInit, signal, computed, inject } from '@angular/core';
 import { CommonModule, DatePipe } from '@angular/common';
 import { Router } from '@angular/router';
 import { ButtonModule } from 'primeng/button';
 import { TagModule } from 'primeng/tag';
 import { TooltipModule } from 'primeng/tooltip';
+import { ProgressSpinnerModule } from 'primeng/progressspinner';
 import { ConfirmationService, MessageService } from 'primeng/api';
 import { Todo, FilterType } from '../models';
 import { TodoService } from '../services/todo.service';
@@ -30,19 +27,20 @@ import { TodoService } from '../services/todo.service';
 @Component({
   selector: 'app-todo-list',
   standalone: true,
-  imports: [CommonModule, DatePipe, ButtonModule, TagModule, TooltipModule],
+  imports: [CommonModule, DatePipe, ButtonModule, TagModule, TooltipModule, ProgressSpinnerModule],
   templateUrl: './todo-list.component.html',
 })
-export class TodoListComponent {
+export class TodoListComponent implements OnInit {
   private todoService         = inject(TodoService);
   private router              = inject(Router);
   private confirmationService = inject(ConfirmationService);
   private messageService      = inject(MessageService);
 
-  // Filtro gerenciado localmente (não vem mais via input do pai).
   filter = signal<FilterType>('all');
 
-  // Computed a partir do signal do service — reage automaticamente a qualquer CRUD.
+  // Delegado ao service — alimentado pelo GET /api/todos no loadAll().
+  readonly loading = this.todoService.loading;
+
   totalCount     = computed(() => this.todoService.todos().length);
   activeCount    = computed(() => this.todoService.todos().filter(t => !t.completed).length);
   completedCount = computed(() => this.todoService.todos().filter(t => t.completed).length);
@@ -56,37 +54,40 @@ export class TodoListComponent {
     });
   });
 
+  // ── Inicialização — busca a lista no backend ──────────────────────────────
+  ngOnInit(): void {
+    // GET /api/todos → preenche todoService.todos() via signal
+    this.todoService.loadAll();
+  }
+
   // ── Navegação — envia o todo via state ────────────────────────────────────
 
-  /** Ativa a rota INCLUIR (/todos/new). */
   goToAdd(): void {
     this.router.navigate(['/todos', 'new']);
   }
 
-  /**
-   * Ativa a rota DETALHAR (/todos/:id) e passa o objeto todo via state.
-   * Requisito: "LISTAGEM envie informação na ativação da rota de DETALHE."
-   */
+  /** Navega para DETALHAR passando o todo via Navigation State. */
   goToDetail(todo: Todo): void {
     this.router.navigate(['/todos', todo.id], { state: { todo } });
   }
 
-  /**
-   * Ativa a rota ATUALIZAR (/todos/:id/edit) e passa o objeto todo via state.
-   * Requisito: "LISTAGEM envie informação na ativação da rota de ATUALIZAÇÃO."
-   */
+  /** Navega para ATUALIZAR passando o todo via Navigation State. */
   goToEdit(todo: Todo): void {
     this.router.navigate(['/todos', todo.id, 'edit'], { state: { todo } });
   }
 
-  // ── Operações diretas no service ──────────────────────────────────────────
+  // ── Operações HTTP via service ────────────────────────────────────────────
 
-  /** Alterna completed diretamente via service — sem navegação. */
+  /** PUT /api/todos/:id — alterna completed. */
   onToggle(id: number): void {
-    this.todoService.toggle(id);
+    this.todoService.toggle(id).subscribe({
+      error: () => this.messageService.add({
+        severity: 'error', summary: 'Erro', detail: 'Não foi possível atualizar a tarefa.', life: 3000,
+      }),
+    });
   }
 
-  /** Exibe confirmação e delega remoção ao service. */
+  /** DELETE /api/todos/:id — remove após confirmação. */
   onDelete(todo: Todo): void {
     this.confirmationService.confirm({
       message: `Deseja excluir a tarefa "${todo.text}"?`,
@@ -96,12 +97,16 @@ export class TodoListComponent {
       rejectLabel: 'Cancelar',
       acceptButtonStyleClass: 'p-button-danger',
       accept: () => {
-        this.todoService.remove(todo.id);
-        this.messageService.add({
-          severity: 'warn',
-          summary: 'Tarefa removida',
-          detail: `"${todo.text}" foi excluída.`,
-          life: 3000,
+        this.todoService.remove(todo.id).subscribe({
+          next: () => {
+            this.messageService.add({
+              severity: 'warn', summary: 'Tarefa removida',
+              detail: `"${todo.text}" foi excluída.`, life: 3000,
+            });
+          },
+          error: () => this.messageService.add({
+            severity: 'error', summary: 'Erro', detail: 'Não foi possível remover a tarefa.', life: 3000,
+          }),
         });
       },
     });

@@ -1,112 +1,142 @@
 /**
- * TodoService — SERVIÇO DE DADOS
+ * TodoService — SERVIÇO COM BACKEND REST/JSON
  *
- * Requisito atendido: "Adicione um service para guardar as informações do
- * model de seu sistema nas operações inserir, atualizar, detalhar, listar
- * e remover de um modelo."
+ * Requisito: "O serviço deve utilizar HttpClient para comunicação com o
+ * backend nas operações inserir, atualizar, detalhar, remover e listar."
  *
- * Responsabilidades:
- *   • É a única fonte de verdade do estado da lista (signal _todos).
- *   • Expõe o signal como readonly para os componentes não escreverem
- *     diretamente — toda mutação passa pelos métodos do service.
- *   • Fornece os 5 métodos CRUD exigidos:
- *       getAll()   → listar
- *       getById()  → detalhar
- *       add()      → inserir
- *       update()   → atualizar
- *       remove()   → remover
- *     Bônus: toggle() para alternar completed sem reabrir o formulário.
+ * Arquitetura:
+ *   • Todos os métodos usam HttpClient para comunicar com a API REST em /api.
+ *   • O signal privado _todos é mantido como cache local reativo — atualizado
+ *     via tap() após cada operação HTTP bem-sucedida. Os componentes continuam
+ *     usando todoService.todos() de forma reativa, sem polling.
+ *   • Métodos de escrita retornam Observable<T> para que os componentes
+ *     possam reagir ao sucesso/erro (exibir toast, navegar etc.).
  *
- * Uso nos componentes (injeção via inject()):
- *   private todoService = inject(TodoService);
+ * Endpoints consumidos (montados em /api pelo proxy Replit):
+ *   GET    /api/todos       → LISTAR
+ *   POST   /api/todos       → INSERIR
+ *   GET    /api/todos/:id   → DETALHAR
+ *   PUT    /api/todos/:id   → ATUALIZAR
+ *   DELETE /api/todos/:id   → REMOVER
  */
 
-import { Injectable, signal } from '@angular/core';
+import { Injectable, signal, inject } from '@angular/core';
+import { HttpClient } from '@angular/common/http';
+import { Observable, EMPTY } from 'rxjs';
+import { map, tap } from 'rxjs/operators';
 import { Todo, TodoFormData } from '../models';
+
+/** Shape retornada pelo backend (createdAt vem como string ISO 8601). */
+interface TodoApi {
+  id: number;
+  text: string;
+  description: string;
+  priority: number;
+  completed: boolean;
+  createdAt: string;
+}
 
 @Injectable({ providedIn: 'root' })
 export class TodoService {
+  private http = inject(HttpClient);
 
-  // Estado privado — somente este service pode escrever aqui.
-  private readonly _todos = signal<Todo[]>([
-    {
-      id: 1,
-      text: 'Estudar Angular 17 com Signals',
-      description: 'Aprender sobre signals, computed e effects para gerenciamento de estado reativo.',
-      priority: 3,
-      completed: false,
-      createdAt: new Date('2026-05-10T09:00:00'),
-    },
-    {
-      id: 2,
-      text: 'Configurar PrimeNG no projeto',
-      description: 'Instalar e configurar o tema lara-light-blue com os componentes necessários.',
-      priority: 2,
-      completed: true,
-      createdAt: new Date('2026-05-11T14:30:00'),
-    },
-    {
-      id: 3,
-      text: 'Criar layout responsivo com Tailwind',
-      description: '',
-      priority: 1,
-      completed: false,
-      createdAt: new Date('2026-05-12T08:00:00'),
-    },
-  ]);
+  private readonly BASE = '/api/todos';
 
-  // Contador privado para geração de IDs únicos.
-  private nextId = 4;
+  // Cache reativo local — alimentado pelas respostas HTTP.
+  private readonly _todos   = signal<Todo[]>([]);
+  private readonly _loading = signal(false);
 
+  /** Lista reativa — componentes consomem via todoService.todos(). */
+  readonly todos   = this._todos.asReadonly();
+  /** Indica carregamento inicial — use para exibir skeleton/spinner. */
+  readonly loading = this._loading.asReadonly();
+
+  // ── Mapeamento API → modelo local ────────────────────────────────────────
+  private fromApi(t: TodoApi): Todo {
+    return { ...t, createdAt: new Date(t.createdAt) };
+  }
+
+  // ── LISTAR — GET /api/todos ──────────────────────────────────────────────
   /**
-   * Signal público somente-leitura.
-   * Componentes leem via todoService.todos() sem poder modificar diretamente.
+   * Carrega a lista completa do backend e atualiza o signal _todos.
+   * Deve ser chamado em ngOnInit() do TodoListComponent.
    */
-  readonly todos = this._todos.asReadonly();
-
-  // ── LISTAR ────────────────────────────────────────────────────────────────
-  /** Retorna o snapshot atual da lista. */
-  getAll(): Todo[] {
-    return this._todos();
+  loadAll(): void {
+    this._loading.set(true);
+    this.http.get<TodoApi[]>(this.BASE).pipe(
+      map(items => items.map(t => this.fromApi(t))),
+    ).subscribe({
+      next: todos => {
+        this._todos.set(todos);
+        this._loading.set(false);
+      },
+      error: () => this._loading.set(false),
+    });
   }
 
-  // ── DETALHAR ──────────────────────────────────────────────────────────────
-  /** Busca uma tarefa pelo id. Retorna undefined se não encontrada. */
-  getById(id: number): Todo | undefined {
-    return this._todos().find(t => t.id === id);
-  }
-
-  // ── INSERIR ───────────────────────────────────────────────────────────────
-  /** Cria uma nova tarefa, insere no início da lista e retorna o objeto criado. */
-  add(data: TodoFormData): Todo {
-    const newTodo: Todo = {
-      id: this.nextId++,
-      ...data,
-      createdAt: new Date(),
-    };
-    this._todos.update(todos => [newTodo, ...todos]);
-    return newTodo;
-  }
-
-  // ── ATUALIZAR ─────────────────────────────────────────────────────────────
-  /** Mescla os novos dados na tarefa de id informado. */
-  update(id: number, data: TodoFormData): void {
-    this._todos.update(todos =>
-      todos.map(t => t.id === id ? { ...t, ...data } : t)
+  // ── DETALHAR — GET /api/todos/:id ────────────────────────────────────────
+  /**
+   * Busca uma tarefa pelo id via HTTP.
+   * Retorna Observable<Todo> — componentes assinam para fallback quando
+   * não há dado no Navigation State (acesso direto pela URL).
+   */
+  getById(id: number): Observable<Todo> {
+    return this.http.get<TodoApi>(`${this.BASE}/${id}`).pipe(
+      map(t => this.fromApi(t)),
     );
   }
 
-  // ── REMOVER ───────────────────────────────────────────────────────────────
-  /** Remove a tarefa de id informado da lista. */
-  remove(id: number): void {
-    this._todos.update(todos => todos.filter(t => t.id !== id));
+  // ── INSERIR — POST /api/todos ─────────────────────────────────────────────
+  /**
+   * Cria um novo todo via POST e insere no início do cache local.
+   * O componente assina para navegar/exibir toast após sucesso.
+   */
+  add(data: TodoFormData): Observable<Todo> {
+    return this.http.post<TodoApi>(this.BASE, data).pipe(
+      map(t => this.fromApi(t)),
+      tap(newTodo => {
+        this._todos.update(todos => [newTodo, ...todos]);
+      }),
+    );
   }
 
-  // ── ALTERNAR STATUS ───────────────────────────────────────────────────────
-  /** Inverte o campo completed da tarefa — atalho para não abrir o formulário. */
-  toggle(id: number): void {
-    this._todos.update(todos =>
-      todos.map(t => t.id === id ? { ...t, completed: !t.completed } : t)
+  // ── ATUALIZAR — PUT /api/todos/:id ───────────────────────────────────────
+  /**
+   * Atualiza o todo via PUT e reflete no cache local.
+   * O componente assina para navegar/exibir toast após sucesso.
+   */
+  update(id: number, data: TodoFormData): Observable<Todo> {
+    return this.http.put<TodoApi>(`${this.BASE}/${id}`, data).pipe(
+      map(t => this.fromApi(t)),
+      tap(updated => {
+        this._todos.update(todos =>
+          todos.map(t => t.id === id ? updated : t),
+        );
+      }),
     );
+  }
+
+  // ── REMOVER — DELETE /api/todos/:id ─────────────────────────────────────
+  /**
+   * Remove o todo via DELETE e retira do cache local.
+   * O componente assina para exibir toast após sucesso.
+   */
+  remove(id: number): Observable<void> {
+    return this.http.delete<void>(`${this.BASE}/${id}`).pipe(
+      tap(() => {
+        this._todos.update(todos => todos.filter(t => t.id !== id));
+      }),
+    );
+  }
+
+  // ── ALTERNAR STATUS — PUT /api/todos/:id ─────────────────────────────────
+  /**
+   * Inverte o campo completed e sincroniza com o backend via update().
+   * Atalho para não abrir o formulário apenas para marcar como concluída.
+   */
+  toggle(id: number): Observable<Todo> {
+    const todo = this._todos().find(t => t.id === id);
+    if (!todo) return EMPTY;
+    return this.update(id, { ...todo, completed: !todo.completed });
   }
 }
