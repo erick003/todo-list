@@ -1,18 +1,14 @@
 /**
  * TodoDetailComponent — operação DETALHAR (rota: /todos/:id)
  *
- * Requisito: "LISTAGEM envie informação na ativação da rota de DETALHE e
- * este componente utilize essa mesma informação na nova rota ativada."
+ * Leitura dos dados (prioridade):
+ *   1. history.state.todo — objeto passado pela lista via Navigation State
+ *      (router.navigate com { state: { todo } }). Uso imediato, sem HTTP.
+ *   2. Fallback HTTP: GET /api/todos/:id — quando o usuário acessa a URL
+ *      diretamente ou recarrega a página (history.state fica vazio).
  *
- * Leitura dos dados recebidos da lista:
- *   1. history.state.todo — objeto Todo passado pelo TodoListComponent via
- *      router.navigate(['/todos', id], { state: { todo } }).
- *      Disponível sem precisar buscar no service — é a informação enviada
- *      pela lista no momento da navegação.
- *   2. Fallback: todoService.getById(id) — usado quando o usuário acessa
- *      a URL diretamente (sem passar pela lista).
- *
- * Este componente não usa mais p-dialog nem model() — é uma página completa.
+ * goToEdit() também passa o todo via state para o formulário de edição,
+ * encadeando a passagem de dados: lista → detalhe → edição.
  */
 
 import { Component, OnInit, signal, inject } from '@angular/core';
@@ -21,13 +17,14 @@ import { ActivatedRoute, Router } from '@angular/router';
 import { ButtonModule } from 'primeng/button';
 import { TagModule } from 'primeng/tag';
 import { DividerModule } from 'primeng/divider';
+import { ProgressSpinnerModule } from 'primeng/progressspinner';
 import { Todo } from '../models';
 import { TodoService } from '../services/todo.service';
 
 @Component({
   selector: 'app-todo-detail',
   standalone: true,
-  imports: [CommonModule, DatePipe, ButtonModule, TagModule, DividerModule],
+  imports: [CommonModule, DatePipe, ButtonModule, TagModule, DividerModule, ProgressSpinnerModule],
   templateUrl: './todo-detail.component.html',
 })
 export class TodoDetailComponent implements OnInit {
@@ -35,38 +32,39 @@ export class TodoDetailComponent implements OnInit {
   private router       = inject(Router);
   private todoService  = inject(TodoService);
 
-  // Signal local que armazena o todo a ser exibido.
-  todo = signal<Todo | null>(null);
+  todo         = signal<Todo | null>(null);
+  loadingById  = signal(false);
 
   ngOnInit(): void {
     const id = Number(this.route.snapshot.paramMap.get('id'));
 
-    // Requisito: usa a informação enviada pela lista via Navigation State.
-    // history.state é preenchido pelo Angular quando router.navigate é chamado
-    // com a opção { state: { todo } } no TodoListComponent.
+    // 1. Tenta usar o dado enviado pela lista via Navigation State.
     const stateData = history.state as { todo?: Todo };
-    this.todo.set(stateData.todo ?? this.todoService.getById(id) ?? null);
+    if (stateData.todo) {
+      this.todo.set(stateData.todo);
+      return;
+    }
+
+    // 2. Fallback: GET /api/todos/:id (acesso direto pela URL).
+    this.loadingById.set(true);
+    this.todoService.getById(id).subscribe({
+      next: t  => { this.todo.set(t);    this.loadingById.set(false); },
+      error: () => { this.todo.set(null); this.loadingById.set(false); },
+    });
   }
 
-  /** Navega de volta para a listagem. */
   goBack(): void {
     this.router.navigate(['/todos']);
   }
 
-  /**
-   * Navega para a rota de edição, passando o todo atual via state.
-   * Encadeia a passagem de dados: lista → detalhe → edição.
-   */
+  /** Navega para edição passando o todo atual via state. */
   goToEdit(): void {
     const t = this.todo();
     if (t) {
-      // Obtém a versão mais recente do service antes de abrir o formulário.
-      const fresh = this.todoService.getById(t.id) ?? t;
-      this.router.navigate(['/todos', fresh.id, 'edit'], { state: { todo: fresh } });
+      this.router.navigate(['/todos', t.id, 'edit'], { state: { todo: t } });
     }
   }
 
-  // ── Helpers de exibição ───────────────────────────────────────────────────
   getPriorityLabel(priority: number): string {
     return (['', 'Baixa', 'Média', 'Alta'])[priority] ?? 'Baixa';
   }

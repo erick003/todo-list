@@ -2,22 +2,17 @@
  * TodoFormComponent — operações INCLUIR e ATUALIZAR
  *
  * Rotas:
- *   /todos/new        → mode 'add'  (sem parâmetro :id)
- *   /todos/:id/edit   → mode 'edit' (com parâmetro :id)
+ *   /todos/new        → mode 'add'  (POST /api/todos)
+ *   /todos/:id/edit   → mode 'edit' (PUT  /api/todos/:id)
  *
- * Requisito: "LISTAGEM envie informação na ativação da rota de ATUALIZAÇÃO
- * e este componente utilize essa mesma informação na nova rota ativada."
+ * Leitura dos dados no modo edição:
+ *   1. history.state.todo — passado pela lista/detalhe via Navigation State.
+ *   2. Fallback HTTP: GET /api/todos/:id — acesso direto pela URL.
  *
- * Leitura dos dados recebidos da lista (modo edição):
- *   1. history.state.todo — objeto Todo passado pelo TodoListComponent (ou
- *      TodoDetailComponent) via router.navigate([...], { state: { todo } }).
- *   2. Fallback: todoService.getById(id) — para acesso direto pela URL.
- *
- * O modo (add/edit) é determinado pela presença do parâmetro :id na rota,
- * eliminando a necessidade de input() para receber o modo do pai.
- *
- * Este componente não usa mais p-dialog nem model() — é uma página completa.
- * O formulário é populado em ngOnInit() em vez de effect().
+ * onSave():
+ *   Assina o Observable retornado por todoService.add() ou todoService.update().
+ *   O HttpClient efetua a chamada HTTP apenas quando há um subscriber.
+ *   Após a resposta, exibe toast e navega de volta para /todos.
  */
 
 import { Component, OnInit, signal, computed, inject } from '@angular/core';
@@ -53,22 +48,20 @@ export class TodoFormComponent implements OnInit {
   private todoService    = inject(TodoService);
   private messageService = inject(MessageService);
 
-  // Modo determinado pela rota em ngOnInit (não vem mais de input()).
   mode       = signal<'add' | 'edit'>('add');
   editTarget = signal<Todo | null>(null);
+  saving     = signal(false);
 
-  // ── Signal Form — campos ──────────────────────────────────────────────────
+  // ── Signal Form ───────────────────────────────────────────────────────────
   formText        = signal('');
   formDescription = signal('');
   formPriority    = signal<number>(2);
   formCompleted   = signal(false);
 
-  // ── Signal Form — touched ─────────────────────────────────────────────────
   textTouched        = signal(false);
   descriptionTouched = signal(false);
   priorityTouched    = signal(false);
 
-  // ── Signal Form — validação ───────────────────────────────────────────────
   textError = computed<string | null>(() => {
     const v = this.formText().trim();
     if (!v)             return 'O título é obrigatório.';
@@ -105,25 +98,29 @@ export class TodoFormComponent implements OnInit {
     const id = this.route.snapshot.paramMap.get('id');
 
     if (id) {
-      // Modo ATUALIZAR: URL possui :id → /todos/:id/edit
       this.mode.set('edit');
 
-      // Requisito: lê o todo enviado pela lista via Navigation State.
-      // history.state é preenchido pelo router.navigate(..., { state: { todo } })
-      // chamado em TodoListComponent.goToEdit() ou TodoDetailComponent.goToEdit().
+      // 1. Dado enviado pela lista/detalhe via Navigation State.
       const stateData = history.state as { todo?: Todo };
-      const target = stateData.todo ?? this.todoService.getById(Number(id)) ?? null;
-      this.editTarget.set(target);
-
-      // Preenche o formulário com os dados recebidos.
-      if (target) {
-        this.formText.set(target.text);
-        this.formDescription.set(target.description);
-        this.formPriority.set(target.priority);
-        this.formCompleted.set(target.completed);
+      if (stateData.todo) {
+        this.editTarget.set(stateData.todo);
+        this.populate(stateData.todo);
+        return;
       }
+
+      // 2. Fallback HTTP: GET /api/todos/:id.
+      this.todoService.getById(Number(id)).subscribe({
+        next: t  => { this.editTarget.set(t); this.populate(t); },
+        error: () => {},
+      });
     }
-    // Modo INCLUIR: URL é /todos/new → campos permanecem com valores padrão.
+  }
+
+  private populate(t: Todo): void {
+    this.formText.set(t.text);
+    this.formDescription.set(t.description);
+    this.formPriority.set(t.priority);
+    this.formCompleted.set(t.completed);
   }
 
   // ── Ações ─────────────────────────────────────────────────────────────────
@@ -131,7 +128,7 @@ export class TodoFormComponent implements OnInit {
     this.textTouched.set(true);
     this.descriptionTouched.set(true);
     this.priorityTouched.set(true);
-    if (!this.isFormValid()) return;
+    if (!this.isFormValid() || this.saving()) return;
 
     const data: TodoFormData = {
       text:        this.formText().trim(),
@@ -140,22 +137,46 @@ export class TodoFormComponent implements OnInit {
       completed:   this.formCompleted(),
     };
 
+    this.saving.set(true);
+
     if (this.mode() === 'add') {
-      this.todoService.add(data);                                         // INSERIR
-      this.messageService.add({
-        severity: 'success', summary: 'Tarefa adicionada',
-        detail: `"${data.text}" foi criada com sucesso.`, life: 3000,
+      // POST /api/todos
+      this.todoService.add(data).subscribe({
+        next: () => {
+          this.messageService.add({
+            severity: 'success', summary: 'Tarefa adicionada',
+            detail: `"${data.text}" foi criada com sucesso.`, life: 3000,
+          });
+          this.router.navigate(['/todos']);
+        },
+        error: () => {
+          this.saving.set(false);
+          this.messageService.add({
+            severity: 'error', summary: 'Erro', detail: 'Não foi possível salvar a tarefa.', life: 3000,
+          });
+        },
       });
     } else {
       const id = this.editTarget()?.id;
-      if (id != null) this.todoService.update(id, data);                 // ATUALIZAR
-      this.messageService.add({
-        severity: 'info', summary: 'Tarefa atualizada',
-        detail: `"${data.text}" foi atualizada.`, life: 3000,
+      if (id == null) return;
+
+      // PUT /api/todos/:id
+      this.todoService.update(id, data).subscribe({
+        next: () => {
+          this.messageService.add({
+            severity: 'info', summary: 'Tarefa atualizada',
+            detail: `"${data.text}" foi atualizada.`, life: 3000,
+          });
+          this.router.navigate(['/todos']);
+        },
+        error: () => {
+          this.saving.set(false);
+          this.messageService.add({
+            severity: 'error', summary: 'Erro', detail: 'Não foi possível atualizar a tarefa.', life: 3000,
+          });
+        },
       });
     }
-
-    this.router.navigate(['/todos']);  // retorna à lista após salvar
   }
 
   onCancel(): void {
