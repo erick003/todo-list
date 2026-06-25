@@ -3,8 +3,8 @@
   "version": "0.0.0",
   "private": true,
   "scripts": {
-    "dev": "node_modules/.bin/tailwindcss -i src/tailwind-input.css -o src/tailwind-output.css && (node_modules/.bin/tailwindcss -i src/tailwind-input.css -o src/tailwind-output.css --watch &) && NG_CLI_ANALYTICS=false ng build --configuration development --output-path dist && (NG_CLI_ANALYTICS=false ng build --watch --configuration development --output-path dist &) && node serve.mjs",
-    "build": "NG_CLI_ANALYTICS=false ng build --output-path dist",
+    "dev": "pnpm exec cross-env NG_CLI_ANALYTICS=false ng build --configuration development --output-path dist && pnpm exec node serve.mjs",
+    "build": "pnpm exec cross-env NG_CLI_ANALYTICS=false ng build --output-path dist",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
@@ -29,6 +29,7 @@
     "@tailwindcss/cli": "^4.3.0",
     "@tailwindcss/postcss": "^4.0.0",
     "@types/node": "^18.18.0",
+    "cross-env": "^7.0.3",
     "postcss": "^8.4.35",
     "tailwindcss": "^4.0.0",
     "typescript": "~5.4.0"
