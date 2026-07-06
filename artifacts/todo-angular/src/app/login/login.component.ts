@@ -1,10 +1,4 @@
-import {
-  Component,
-  signal,
-  computed,
-  inject,
-  OnInit,
-} from '@angular/core';
+import { Component, signal, computed, inject, OnInit } from '@angular/core';
 import { Router } from '@angular/router';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
@@ -21,7 +15,6 @@ import { AuthService } from '../services/auth.service';
 
     <div class="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-100">
       <div class="bg-white rounded-2xl shadow-xl w-full max-w-md p-8">
-
         <div class="text-center mb-8">
           <div class="inline-flex items-center justify-center w-16 h-16 bg-indigo-100 rounded-full mb-4">
             <i class="pi pi-lock text-indigo-600 text-2xl"></i>
@@ -31,7 +24,6 @@ import { AuthService } from '../services/auth.service';
         </div>
 
         <form (ngSubmit)="onSubmit()" novalidate>
-
           <div class="mb-5">
             <label class="block text-sm font-medium text-gray-700 mb-1">Usuário</label>
             <div class="relative">
@@ -41,7 +33,7 @@ import { AuthService } from '../services/auth.service';
               <input
                 type="text"
                 [value]="username()"
-                (input)="username.set(getInputValue($event))"
+                (input)="onUsernameInput($event)"
                 (blur)="usernameTouched.set(true)"
                 placeholder="Digite seu usuário"
                 autocomplete="username"
@@ -50,7 +42,9 @@ import { AuthService } from '../services/auth.service';
                 [class.border-gray-300]="!(usernameTouched() && usernameError())"
               />
             </div>
-            <p *ngIf="usernameTouched() && usernameError()" class="text-red-500 text-xs mt-1">{{ usernameError() }}</p>
+            <p *ngIf="usernameTouched() && usernameError()" class="text-red-500 text-xs mt-1">
+              {{ usernameError() }}
+            </p>
           </div>
 
           <div class="mb-6">
@@ -62,7 +56,7 @@ import { AuthService } from '../services/auth.service';
               <input
                 [type]="showPassword() ? 'text' : 'password'"
                 [value]="password()"
-                (input)="password.set(getInputValue($event))"
+                (input)="onPasswordInput($event)"
                 (blur)="passwordTouched.set(true)"
                 placeholder="Digite sua senha"
                 autocomplete="current-password"
@@ -78,15 +72,15 @@ import { AuthService } from '../services/auth.service';
                 <i [class]="showPassword() ? 'pi pi-eye-slash' : 'pi pi-eye'"></i>
               </button>
             </div>
-            <p *ngIf="passwordTouched() && passwordError()" class="text-red-500 text-xs mt-1">{{ passwordError() }}</p>
+            <p *ngIf="passwordTouched() && passwordError()" class="text-red-500 text-xs mt-1">
+              {{ passwordError() }}
+            </p>
           </div>
 
           <button
             type="submit"
             [disabled]="loading()"
-            class="w-full py-2.5 rounded-lg font-semibold text-sm transition
-                   bg-indigo-600 text-white hover:bg-indigo-700 active:scale-95
-                   disabled:opacity-50 disabled:cursor-not-allowed disabled:active:scale-100"
+            class="w-full py-2.5 rounded-lg font-semibold text-sm transition bg-indigo-600 text-white hover:bg-indigo-700 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed disabled:active:scale-100"
           >
             <span *ngIf="loading(); else loginLabel">
               <i class="pi pi-spin pi-spinner mr-2"></i> Entrando...
@@ -105,16 +99,16 @@ import { AuthService } from '../services/auth.service';
   `,
 })
 export class LoginComponent implements OnInit {
-  private auth: AuthService = inject(AuthService) as AuthService;
-  private router: Router = inject(Router);
-  private toastSvc: MessageService = inject(MessageService);
+  private auth = inject(AuthService);
+  private router = inject(Router);
+  private toastSvc = inject(MessageService);
 
-  username        = signal('');
-  password        = signal('');
+  username = signal('');
+  password = signal('');
   usernameTouched = signal(false);
   passwordTouched = signal(false);
-  showPassword    = signal(false);
-  loading         = signal(false);
+  showPassword = signal(false);
+  loading = signal(false);
 
   usernameError = computed<string | null>(() => {
     const v = this.username().trim();
@@ -129,8 +123,8 @@ export class LoginComponent implements OnInit {
     return null;
   });
 
-  isFormValid = computed(() =>
-    this.usernameError() === null && this.passwordError() === null,
+  isFormValid = computed(
+    () => this.usernameError() === null && this.passwordError() === null,
   );
 
   ngOnInit(): void {
@@ -139,33 +133,30 @@ export class LoginComponent implements OnInit {
     }
   }
 
-  onSubmit(): void {
-    this.usernameTouched.set(true);
-    this.passwordTouched.set(true);
+  onUsernameInput(event: Event): void {
+    this.username.set((event.target as HTMLInputElement).value);
+  }
 
-    if (!this.isFormValid()) return;
-
-    this.loading.set(true);
-    this.auth.login(this.username().trim(), this.password()).subscribe({
-      next: () => this.router.navigate(['/todos']),
-      error: (err: { error?: { message?: string } }) => {
-        this.loading.set(false);
-        const msg = err?.error?.message ?? 'Usuário ou senha inválidos.';
-        this.toastSvc.add({
-          severity: 'error',
-          summary: 'Falha no login',
-          detail: msg,
-          life: 4000,
-        });
-      },
-    });
+  onPasswordInput(event: Event): void {
+    this.password.set((event.target as HTMLInputElement).value);
   }
 
   toggleShowPassword(): void {
     this.showPassword.update(v => !v);
   }
 
-  getInputValue(event: Event): string {
-    return (event.target as HTMLInputElement).value;
+  onSubmit(): void {
+    this.usernameTouched.set(true);
+    this.passwordTouched.set(true);
+    if (!this.isFormValid()) return;
+    this.loading.set(true);
+    this.auth.login(this.username().trim(), this.password()).subscribe({
+      next: () => this.router.navigate(['/todos']),
+      error: (err: { error?: { message?: string } }) => {
+        this.loading.set(false);
+        const msg = err?.error?.message ?? 'Usuário ou senha inválidos.';
+        this.toastSvc.add({ severity: 'error', summary: 'Falha no login', detail: msg, life: 4000 });
+      },
+    });
   }
 }

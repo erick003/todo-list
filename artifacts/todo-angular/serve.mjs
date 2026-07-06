@@ -1,4 +1,5 @@
 import { createServer, request as httpRequest } from 'http';
+import net from 'net';
 import { readFile } from 'fs/promises';
 import { join, extname } from 'path';
 import { existsSync } from 'fs';
@@ -97,9 +98,10 @@ const mimeTypes = {
 function startWebServer() {
   createServer((req, res) => {
     if (req.url.startsWith('/api')) {
-      const apiPath = req.url.replace('/api', '');
+      // Forward the full path (including /api) to the API server so routes
+      // mounted at /api/* on the backend remain reachable.
       const proxy = httpRequest(
-        { hostname: 'localhost', port: apiPort, path: apiPath, method: req.method, headers: req.headers },
+        { hostname: 'localhost', port: apiPort, path: req.url, method: req.method, headers: req.headers },
         (proxyRes) => {
           res.writeHead(proxyRes.statusCode, proxyRes.headers);
           proxyRes.pipe(res, { end: true });
@@ -133,5 +135,31 @@ function startWebServer() {
   });
 }
 
-startApiServer();
-startWebServer();
+async function apiIsRunning() {
+  return new Promise((resolve) => {
+    const socket = new net.Socket();
+    socket.setTimeout(500);
+    socket.once('connect', () => {
+      socket.destroy();
+      resolve(true);
+    });
+    socket.once('timeout', () => {
+      socket.destroy();
+      resolve(false);
+    });
+    socket.once('error', () => {
+      resolve(false);
+    });
+    socket.connect(apiPort, '127.0.0.1');
+  });
+}
+
+(async () => {
+  const running = await apiIsRunning();
+  if (running) {
+    console.log(`  ➜  External API detected on localhost:${apiPort}, skipping internal mock API.`);
+  } else {
+    startApiServer();
+  }
+  startWebServer();
+})();

@@ -1,17 +1,13 @@
-﻿import { Router, type IRouter, type Request, type Response } from "express";
+import { Router, type IRouter, type Request, type Response } from "express";
 import jwt from "jsonwebtoken";
 
 const router: IRouter = Router();
-
 const JWT_SECRET = process.env["SESSION_SECRET"] ?? "changeme-dev-secret";
 const JWT_EXPIRES_IN = "8h";
+const USERS: Record<string, string> = { admin: "admin123", user: "user123" };
 
-const USERS: Record<string, string> = {
-  admin: "admin123",
-  user:  "user123",
-};
-
-router.post("/auth/login", (req: Request, res: Response) => {
+// Auth endpoint for login. Returns a signed JWT when credentials are valid.
+router.post("/login", (req: Request, res: Response) => {
   const { username, password } = req.body as { username?: unknown; password?: unknown };
 
   if (typeof username !== "string" || typeof password !== "string") {
@@ -25,12 +21,8 @@ router.post("/auth/login", (req: Request, res: Response) => {
     return;
   }
 
-  const token = jwt.sign(
-    { sub: username, username },
-    JWT_SECRET,
-    { expiresIn: JWT_EXPIRES_IN },
-  );
-
+  const token = jwt.sign({ sub: username, username }, JWT_SECRET, { expiresIn: JWT_EXPIRES_IN });
+  // Return a signed JWT for client-side storage and future authenticated requests.
   res.json({ token });
 });
 
