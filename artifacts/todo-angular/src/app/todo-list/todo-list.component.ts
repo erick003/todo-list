@@ -23,6 +23,7 @@ import { ProgressSpinnerModule } from 'primeng/progressspinner';
 import { ConfirmationService, MessageService } from 'primeng/api';
 import { Todo, FilterType } from '../models';
 import { TodoService } from '../services/todo.service';
+import { AuthService } from '../services/auth.service';
 
 @Component({
   selector: 'app-todo-list',
@@ -35,6 +36,7 @@ export class TodoListComponent implements OnInit {
   private router              = inject(Router);
   private confirmationService = inject(ConfirmationService);
   private messageService      = inject(MessageService);
+  private auth                = inject(AuthService);
 
   filter = signal<FilterType>('all');
 
@@ -122,5 +124,10 @@ export class TodoListComponent implements OnInit {
       1: 'success', 2: 'warning', 3: 'danger',
     };
     return map[priority] ?? 'success';
+  }
+
+  logout(): void {
+    this.auth.logout();
+    this.router.navigate(['/login']);
   }
 }

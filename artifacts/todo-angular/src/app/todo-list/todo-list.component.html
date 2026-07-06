@@ -7,8 +7,15 @@
         <h1 class="text-3xl font-bold text-gray-900 tracking-tight">To Do List</h1>
         <p class="text-gray-500 text-sm mt-1">Gerencie suas tarefas com eficiência</p>
       </div>
-      <!-- goToAdd() → navega para /todos/new -->
-      <p-button label="Nova Tarefa" icon="pi pi-plus" (onClick)="goToAdd()"></p-button>
+      <div class="flex items-center gap-2">
+        <!-- goToAdd() → navega para /todos/new -->
+        <p-button label="Nova Tarefa" icon="pi pi-plus" size="large" 
+          styleClass="bg-indigo-600 text-white hover:bg-indigo-700 px-4 py-2 rounded-lg font-semibold"
+          (onClick)="goToAdd()"></p-button>
+        <p-button label="Sair" icon="pi pi-sign-out" severity="secondary" size="large"
+          styleClass="bg-gray-400 text-white hover:bg-gray-500 px-4 py-2 rounded-lg font-semibold"
+          (onClick)="logout()"></p-button>
+      </div>
     </header>
 
     <!-- Stats -->
