@@ -5,6 +5,7 @@
   "scripts": {
     "preinstall": "node preinstall.mjs",
     "build": "pnpm run typecheck && pnpm -r --if-present run build",
+    "dev": "pnpm run dev:all",
     "dev:api-server": "pnpm --dir ./artifacts/api-server exec cross-env PORT=8080 pnpm run dev",
     "start:api-server": "pnpm --dir ./artifacts/api-server exec cross-env PORT=8080 pnpm run start",
     "dev:todo-angular": "pnpm --dir ./artifacts/todo-angular exec pnpm run dev",

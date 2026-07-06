@@ -91,9 +91,6 @@ import { AuthService } from '../services/auth.service';
           </button>
         </form>
 
-        <div class="mt-6 p-3 bg-gray-50 rounded-lg border border-gray-200 text-xs text-gray-500 text-center">
-          <strong>Demo:</strong> admin / admin123 &nbsp;|&nbsp; user / user123
-        </div>
       </div>
     </div>
   `,

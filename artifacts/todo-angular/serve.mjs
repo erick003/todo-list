@@ -5,8 +5,8 @@ import { join, extname } from 'path';
 import { existsSync } from 'fs';
 import { parse } from 'url';
 
-const port    = process.env.PORT     || 4200;
-const apiPort = process.env.API_PORT || 8080;
+const port    = Number(process.env.PORT || 4200);
+const apiPort = Number(process.env.API_PORT || 8080);
 const dir     = join(import.meta.dirname, 'dist', 'browser');
 
 // Dados em memória — tarefas de exemplo
@@ -95,7 +95,28 @@ const mimeTypes = {
   '.woff2': 'font/woff2',
 };
 
-function startWebServer() {
+function getAvailablePort(startPort, host = '0.0.0.0') {
+  return new Promise((resolve, reject) => {
+    const probe = createServer();
+
+    probe.once('error', (error) => {
+      if (error.code === 'EADDRINUSE') {
+        resolve(getAvailablePort(startPort + 1, host));
+      } else {
+        reject(error);
+      }
+    });
+
+    probe.listen(startPort, host, () => {
+      const address = probe.address();
+      probe.close(() => resolve(address.port));
+    });
+  });
+}
+
+async function startWebServer(preferredPort = port) {
+  const webPort = await getAvailablePort(preferredPort);
+
   createServer((req, res) => {
     if (req.url.startsWith('/api')) {
       // Forward the full path (including /api) to the API server so routes
@@ -129,8 +150,8 @@ function startWebServer() {
       res.end('Not found');
     });
 
-  }).listen(port, '0.0.0.0', () => {
-    console.log(`  ➜  Local:   http://localhost:${port}/`);
+  }).listen(webPort, '0.0.0.0', () => {
+    console.log(`  ➜  Local:   http://localhost:${webPort}/`);
     console.log(`  ➜  API proxy -> localhost:${apiPort}`);
   });
 }
@@ -161,5 +182,5 @@ async function apiIsRunning() {
   } else {
     startApiServer();
   }
-  startWebServer();
+  await startWebServer();
 })();
