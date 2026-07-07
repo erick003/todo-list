@@ -6,7 +6,7 @@ const JWT_SECRET = process.env["SESSION_SECRET"] ?? "changeme-dev-secret";
 const JWT_EXPIRES_IN = "8h";
 const USERS: Record<string, string> = { admin: "admin123", user: "user123" };
 
-// Auth endpoint for login. Returns a signed JWT when credentials are valid.
+// Endpoint de autenticação para login. Retorna um JWT assinado quando as credenciais são válidas.
 router.post("/login", (req: Request, res: Response) => {
   const { username, password } = req.body as { username?: unknown; password?: unknown };
 
@@ -22,7 +22,7 @@ router.post("/login", (req: Request, res: Response) => {
   }
 
   const token = jwt.sign({ sub: username, username }, JWT_SECRET, { expiresIn: JWT_EXPIRES_IN });
-  // Return a signed JWT for client-side storage and future authenticated requests.
+  // Retorna um JWT assinado para armazenamento no cliente e futuras requisições autenticadas.
   res.json({ token });
 });
 

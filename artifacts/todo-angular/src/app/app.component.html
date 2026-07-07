@@ -1,16 +1,6 @@
 <p-toast position="top-right"></p-toast>
 <p-confirmDialog></p-confirmDialog>
 <!-- Ponto de montagem das rotas: /todos, /todos/new, /todos/:id, /todos/:id/edit -->
-<header class="app-header" style="display:flex;align-items:center;justify-content:space-between;padding:8px 16px;border-bottom:1px solid #eee">
-	<div>
-		<strong>Todo App</strong>
-	</div>
-	<div *ngIf="auth.isAuthenticated()">
-		Olá, {{ auth.currentUser() }}
-		<!-- Botão de logout visível quando o usuário está autenticado -->
-		<button type="button" (click)="auth.logout()" style="margin-left:12px">Logout</button>
-	</div>
-</header>
 <main style="padding:16px">
 	<router-outlet></router-outlet>
 </main>
