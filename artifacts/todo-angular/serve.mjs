@@ -1,11 +1,87 @@
 import { createServer, request as httpRequest } from 'http';
+import net from 'net';
 import { readFile } from 'fs/promises';
 import { join, extname } from 'path';
 import { existsSync } from 'fs';
+import { parse } from 'url';
 
-const port    = process.env.PORT     || 4200;
-const apiPort = process.env.API_PORT || 8080;
+const port    = Number(process.env.PORT || 4200);
+const apiPort = Number(process.env.API_PORT || 8080);
 const dir     = join(import.meta.dirname, 'dist', 'browser');
+
+// Dados em memória — tarefas de exemplo
+let todos = [
+  { id: 1, text: 'Aprender Angular', description: 'Estudar Angular 17 com Signals', priority: 1, completed: false, createdAt: new Date().toISOString() },
+  { id: 2, text: 'Implementar Tailwind', description: 'Configurar Tailwind CSS no projeto', priority: 2, completed: true, createdAt: new Date().toISOString() },
+  { id: 3, text: 'Criar autenticação', description: 'Login com jwt', priority: 1, completed: false, createdAt: new Date().toISOString() },
+];
+let nextId = 4;
+
+function startApiServer() {
+  createServer((req, res) => {
+    const { pathname, query } = parse(req.url, true);
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+
+    if (req.method === 'OPTIONS') {
+      res.writeHead(200);
+      res.end();
+      return;
+    }
+
+    if (pathname === '/todos' && req.method === 'GET') {
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify(todos));
+    } else if (pathname === '/todos' && req.method === 'POST') {
+      let body = '';
+      req.on('data', chunk => body += chunk);
+      req.on('end', () => {
+        const data = JSON.parse(body);
+        const newTodo = { id: nextId++, ...data, createdAt: new Date().toISOString() };
+        todos.unshift(newTodo);
+        res.writeHead(201, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify(newTodo));
+      });
+    } else if (pathname.startsWith('/todos/') && req.method === 'GET') {
+      const id = Number(pathname.split('/')[2]);
+      const todo = todos.find(t => t.id === id);
+      if (todo) {
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify(todo));
+      } else {
+        res.writeHead(404);
+        res.end();
+      }
+    } else if (pathname.startsWith('/todos/') && req.method === 'PUT') {
+      const id = Number(pathname.split('/')[2]);
+      let body = '';
+      req.on('data', chunk => body += chunk);
+      req.on('end', () => {
+        const data = JSON.parse(body);
+        const idx = todos.findIndex(t => t.id === id);
+        if (idx >= 0) {
+          todos[idx] = { ...todos[idx], ...data, createdAt: todos[idx].createdAt };
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify(todos[idx]));
+        } else {
+          res.writeHead(404);
+          res.end();
+        }
+      });
+    } else if (pathname.startsWith('/todos/') && req.method === 'DELETE') {
+      const id = Number(pathname.split('/')[2]);
+      todos = todos.filter(t => t.id !== id);
+      res.writeHead(204);
+      res.end();
+    } else {
+      res.writeHead(404);
+      res.end('Not found');
+    }
+  }).listen(apiPort, '0.0.0.0', () => {
+    console.log(`  ➜  API server rodando em http://localhost:${apiPort}`);
+  });
+}
 
 const mimeTypes = {
   '.html': 'text/html; charset=utf-8',
@@ -19,38 +95,92 @@ const mimeTypes = {
   '.woff2': 'font/woff2',
 };
 
-createServer((req, res) => {
-  if (req.url.startsWith('/api')) {
-    const proxy = httpRequest(
-      { hostname: 'localhost', port: apiPort, path: req.url, method: req.method, headers: req.headers },
-      (proxyRes) => {
-        res.writeHead(proxyRes.statusCode, proxyRes.headers);
-        proxyRes.pipe(res, { end: true });
-      },
-    );
-    proxy.on('error', () => {
-      res.writeHead(502, { 'Content-Type': 'text/plain' });
-      res.end(`API server nao encontrado em localhost:${apiPort}`);
+function getAvailablePort(startPort, host = '0.0.0.0') {
+  return new Promise((resolve, reject) => {
+    const probe = createServer();
+
+    probe.once('error', (error) => {
+      if (error.code === 'EADDRINUSE') {
+        resolve(getAvailablePort(startPort + 1, host));
+      } else {
+        reject(error);
+      }
     });
-    req.pipe(proxy, { end: true });
-    return;
-  }
 
-  const urlPath = req.url.split('?')[0];
-  let filePath = join(dir, urlPath);
-  if (!existsSync(filePath) || extname(filePath) === '') {
-    filePath = join(dir, 'index.html');
-  }
-  const contentType = mimeTypes[extname(filePath)] || 'application/octet-stream';
-  readFile(filePath).then(content => {
-    res.writeHead(200, { 'Content-Type': contentType, 'Cache-Control': 'no-cache' });
-    res.end(content);
-  }).catch(() => {
-    res.writeHead(404);
-    res.end('Not found');
+    probe.listen(startPort, host, () => {
+      const address = probe.address();
+      probe.close(() => resolve(address.port));
+    });
   });
+}
 
-}).listen(port, '0.0.0.0', () => {
-  console.log(`  ➜  Local:   http://localhost:${port}/`);
-  console.log(`  ➜  API proxy -> localhost:${apiPort}`);
-});
+async function startWebServer(preferredPort = port) {
+  const webPort = await getAvailablePort(preferredPort);
+
+  createServer((req, res) => {
+    if (req.url.startsWith('/api')) {
+      // Forward the full path (including /api) to the API server so routes
+      // mounted at /api/* on the backend remain reachable.
+      const proxy = httpRequest(
+        { hostname: 'localhost', port: apiPort, path: req.url, method: req.method, headers: req.headers },
+        (proxyRes) => {
+          res.writeHead(proxyRes.statusCode, proxyRes.headers);
+          proxyRes.pipe(res, { end: true });
+        },
+      );
+      proxy.on('error', () => {
+        res.writeHead(502, { 'Content-Type': 'text/plain' });
+        res.end(`API server nao encontrado em localhost:${apiPort}`);
+      });
+      req.pipe(proxy, { end: true });
+      return;
+    }
+
+    const urlPath = req.url.split('?')[0];
+    let filePath = join(dir, urlPath);
+    if (!existsSync(filePath) || extname(filePath) === '') {
+      filePath = join(dir, 'index.html');
+    }
+    const contentType = mimeTypes[extname(filePath)] || 'application/octet-stream';
+    readFile(filePath).then(content => {
+      res.writeHead(200, { 'Content-Type': contentType, 'Cache-Control': 'no-cache' });
+      res.end(content);
+    }).catch(() => {
+      res.writeHead(404);
+      res.end('Not found');
+    });
+
+  }).listen(webPort, '0.0.0.0', () => {
+    console.log(`  ➜  Local:   http://localhost:${webPort}/`);
+    console.log(`  ➜  API proxy -> localhost:${apiPort}`);
+  });
+}
+
+async function apiIsRunning() {
+  return new Promise((resolve) => {
+    const socket = new net.Socket();
+    socket.setTimeout(500);
+    socket.once('connect', () => {
+      socket.destroy();
+      resolve(true);
+    });
+    socket.once('timeout', () => {
+      socket.destroy();
+      resolve(false);
+    });
+    socket.once('error', () => {
+      resolve(false);
+    });
+    socket.connect(apiPort, '127.0.0.1');
+  });
+}
+
+(async () => {
+  const running = await apiIsRunning();
+  if (running) {
+    console.log(`  ➜  External API detected on localhost:${apiPort}, skipping internal mock API.`);
+  } else {
+    startApiServer();
+  }
+  await startWebServer();
+})();

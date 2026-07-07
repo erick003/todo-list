@@ -13,11 +13,17 @@ import { Component } from '@angular/core';
 import { RouterOutlet } from '@angular/router';
 import { ToastModule } from 'primeng/toast';
 import { ConfirmDialogModule } from 'primeng/confirmdialog';
+import { CommonModule } from '@angular/common';
+import { inject } from '@angular/core';
+import { AuthService } from './services/auth.service';
+
 
 @Component({
   selector: 'app-root',
   standalone: true,
-  imports: [RouterOutlet, ToastModule, ConfirmDialogModule],
+  imports: [CommonModule, RouterOutlet, ToastModule, ConfirmDialogModule],
   templateUrl: './app.component.html',
 })
-export class AppComponent {}
+export class AppComponent {
+  readonly auth = inject(AuthService);
+}

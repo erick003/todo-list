@@ -1,25 +1,17 @@
-import app from "./app";
-import { logger } from "./lib/logger";
+import { Router, type IRouter } from "express";
+import healthRouter from "./routes/health";
+import todosRouter from "./routes/todos";
+import authRouter from "./routes/auth";
+import { requireAuth } from "./middleware/middleware";
 
-const rawPort = process.env["PORT"];
+const router: IRouter = Router();
 
-if (!rawPort) {
-  throw new Error(
-    "PORT environment variable is required but was not provided.",
-  );
-}
+router.use(healthRouter);
 
-const port = Number(rawPort);
+// Autenticação — rota pública
+router.use(authRouter);
 
-if (Number.isNaN(port) || port <= 0) {
-  throw new Error(`Invalid PORT value: "${rawPort}"`);
-}
+// Todos — protegido por JWT
+router.use(requireAuth, todosRouter);
 
-app.listen(port, (err) => {
-  if (err) {
-    logger.error({ err }, "Error listening on port");
-    process.exit(1);
-  }
-
-  logger.info({ port }, "Server listening");
-});
+export default router;

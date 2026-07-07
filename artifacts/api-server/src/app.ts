@@ -25,10 +25,21 @@ app.use(
     },
   }),
 );
+
 app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
+app.get("/", (_req, res) => {
+  res.json({
+    status: "running",
+    message: "API server is up",
+    endpoints: ["/api/healthz", "/api/todos", "/api/auth/login"],
+  });
+});
+
+// Mount the composed router under /api.
+// The auth router handles /api/auth/login and returns a JWT for valid credentials.
 app.use("/api", router);
 
 export default app;
